@@ -1,0 +1,2 @@
+"""NPC data module."""
+

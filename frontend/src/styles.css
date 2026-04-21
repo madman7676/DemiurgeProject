@@ -1,0 +1,53 @@
+:root {
+  font-family: "Segoe UI", sans-serif;
+  color: #1f2933;
+  background: #f3f4f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.game-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d2d6dc;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.chat-window {
+  min-height: 420px;
+}
+
+.state-panel-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.placeholder-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 900px) {
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
