@@ -1,7 +1,26 @@
 {
-  "comment": "Placeholder world definition. Replace with real structured rules later.",
-  "world_name": "Demiurge Placeholder World",
+  "identity": {
+    "world_id": "world_id",
+    "name": "World Name",
+    "summary": "Short world summary.",
+    "primary_genre": "genre",
+    "tone_tags": []
+  },
+  "hard_rules": [],
+  "soft_rules": [],
   "regions": [],
-  "rules": []
+  "time_model": {
+    "calendar_name": "Calendar Name",
+    "base_unit": "hour",
+    "cycle_unit": "day",
+    "units_per_cycle": 24
+  },
+  "evolution_settings": {
+    "enabled": true,
+    "default_time_threshold": 1,
+    "threshold_unit": "hour",
+    "update_strategy": "threshold_based"
+  },
+  "active_features": [],
+  "meta_rules": []
 }
-

@@ -1,0 +1,7 @@
+{
+  "rule_id": "meta_social_pressure",
+  "title": "Social Pressure",
+  "description": "Repeated disruptive actions gradually increase resistance from organized groups.",
+  "affected_systems": ["npc_reactions", "action_evaluation"],
+  "modifier_note": "Applies lightly unless hard rules are also involved."
+}

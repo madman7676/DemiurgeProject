@@ -1,0 +1,39 @@
+{
+  "action_type": "persuade",
+  "raw_player_input": "I ask Tomas to trust me with the rail manifest.",
+  "interpreted_intent": {
+    "primary_goal": "gain_information",
+    "target_ids": ["npc_stationmaster_01"],
+    "approach": "persuasion"
+  },
+  "feasibility_score": 0.68,
+  "roll_needed": true,
+  "roll_result": {
+    "skill_id": "negotiation",
+    "difficulty": 12
+  },
+  "outcome_summary": "The player attempts to convince Tomas to share guarded information.",
+  "state_changes": [
+    {
+      "scope": "npc_state",
+      "entity_id": "npc_stationmaster_01",
+      "field": "relationship_to_player.trust",
+      "summary": "Trust may improve slightly on success."
+    }
+  ],
+  "npc_reactions": [
+    {
+      "npc_id": "npc_stationmaster_01",
+      "reaction_type": "cautious_interest",
+      "summary": "Tomas listens, but remains guarded."
+    }
+  ],
+  "time_cost": {
+    "amount": 10,
+    "unit": "minute"
+  },
+  "narration_notes": [
+    "Emphasize Tomas's hesitation.",
+    "Keep the tone grounded and tense."
+  ]
+}

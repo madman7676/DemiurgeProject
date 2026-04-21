@@ -1,0 +1,43 @@
+{
+  "identity": {
+    "player_id": "player_001",
+    "name": "Mira Vale"
+  },
+  "race": "Human",
+  "player_class": "Drifter",
+  "background": "Former courier from a collapsed rail guild.",
+  "stats": [
+    {
+      "stat_id": "resolve",
+      "name": "Resolve",
+      "value": 5
+    }
+  ],
+  "skills": [
+    {
+      "skill_id": "negotiation",
+      "name": "Negotiation",
+      "level": 2
+    }
+  ],
+  "inventory": [
+    {
+      "item_id": "rail_map",
+      "name": "Worn Rail Map",
+      "quantity": 1
+    }
+  ],
+  "currencies": [
+    {
+      "currency_id": "coin",
+      "name": "Coin",
+      "amount": 18
+    }
+  ],
+  "status_effects": [],
+  "current_location": {
+    "region_id": "ironhollow",
+    "detail": "Refinery Square"
+  },
+  "party_links": []
+}

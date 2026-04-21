@@ -1,0 +1,61 @@
+{
+  "identity": {
+    "world_id": "clockwork_frontier",
+    "name": "Clockwork Frontier",
+    "summary": "A fading industrial frontier where rumor and ritual shape survival.",
+    "primary_genre": "fantasy-western",
+    "tone_tags": ["grim", "mysterious", "adventurous"]
+  },
+  "hard_rules": [
+    {
+      "rule_id": "hard_magic_cost",
+      "title": "Power Has A Cost",
+      "description": "Any major supernatural act leaves a visible consequence.",
+      "priority": "high"
+    }
+  ],
+  "soft_rules": [
+    {
+      "rule_id": "soft_frontier_rumors",
+      "title": "Rumors Travel Fast",
+      "description": "Important actions tend to become known beyond the local scene.",
+      "priority": "medium"
+    }
+  ],
+  "regions": [
+    {
+      "region_id": "ironhollow",
+      "name": "Ironhollow",
+      "summary": "A soot-stained rail town built around a failing refinery.",
+      "tags": ["industrial", "frontier"]
+    }
+  ],
+  "time_model": {
+    "calendar_name": "Refinery Calendar",
+    "base_unit": "hour",
+    "cycle_unit": "day",
+    "units_per_cycle": 24,
+    "named_phases": ["dawn", "worklight", "dusk", "night"]
+  },
+  "evolution_settings": {
+    "enabled": true,
+    "default_time_threshold": 6,
+    "threshold_unit": "hour",
+    "update_strategy": "threshold_based"
+  },
+  "active_features": [
+    {
+      "feature_id": "reputation",
+      "enabled": true,
+      "notes": "Public standing influences how settlements react."
+    }
+  ],
+  "meta_rules": [
+    {
+      "rule_id": "meta_public_memory",
+      "title": "Settlements Remember",
+      "description": "Communities slowly accumulate opinions about repeated behavior.",
+      "affected_systems": ["npc_reactions", "narration"]
+    }
+  ]
+}

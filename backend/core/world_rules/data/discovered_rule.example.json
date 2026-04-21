@@ -1,0 +1,9 @@
+{
+  "candidate_id": "cand_warded_gate",
+  "title": "Sanctified Gates Resist Violence",
+  "description": "The town gate appears to reject overtly hostile intent after sunset.",
+  "source": "Observed after two failed aggressive actions at the gate.",
+  "confidence": 0.72,
+  "merge_status": "pending",
+  "related_systems": ["world_rules", "action_evaluation"]
+}

@@ -1,0 +1,38 @@
+{
+  "identity": {
+    "npc_id": "npc_stationmaster_01",
+    "name": "Tomas Vey"
+  },
+  "role": "Stationmaster",
+  "location": {
+    "region_id": "ironhollow",
+    "detail": "Rail Office"
+  },
+  "relevance_level": "major",
+  "character": {
+    "archetype": "Guarded authority figure",
+    "personality_traits": ["stern", "practical", "secretive"],
+    "summary": "Keeps order in town by deciding what information moves through the station."
+  },
+  "global_goal": "Keep Ironhollow connected to the outside world.",
+  "current_goal": "Find a reliable courier before the next supply train arrives.",
+  "ambition_level": 7,
+  "reaction_threshold": 4,
+  "relationship_to_player": {
+    "status": "neutral",
+    "trust": 1,
+    "affinity": 0,
+    "tension": 1
+  },
+  "connections": [
+    {
+      "npc_id": "npc_foreman_01",
+      "connection_type": "professional_rival",
+      "strength": 3
+    }
+  ],
+  "combat": {
+    "threat_level": 2,
+    "combat_role": "civilian"
+  }
+}

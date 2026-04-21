@@ -1,0 +1,16 @@
+{
+  "feature_id": "reputation",
+  "name": "Reputation",
+  "description": "Tracks how factions and settlements interpret repeated player behavior.",
+  "routing_hooks": ["post_action"],
+  "state_hooks": ["player_state", "npc_state"],
+  "display_mode": "panel",
+  "visibility": "conditional",
+  "feature_rules": [
+    {
+      "rule_id": "rep_public_actions",
+      "title": "Public Actions Matter",
+      "description": "Visible actions can alter how groups respond to the player."
+    }
+  ]
+}
