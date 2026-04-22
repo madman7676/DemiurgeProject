@@ -1,5 +1,15 @@
-"""Shared game session data models.
+"""Compatibility layer for session state contracts."""
 
-This module will define the high-level game state passed between backend modules.
-"""
+from backend.core.game_state.contracts import (
+    GameSessionState,
+    GameTime,
+    SessionMessage,
+    VisibleGameState,
+)
 
+__all__ = [
+    "GameSessionState",
+    "GameTime",
+    "SessionMessage",
+    "VisibleGameState",
+]

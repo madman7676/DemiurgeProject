@@ -10,3 +10,6 @@ frontend/dist/
 .env
 .env.*
 
+# venv
+.venv/
+venv/

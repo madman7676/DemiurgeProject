@@ -2,7 +2,7 @@
 
 Minimal starter structure for a web-based text adventure game powered by a local LLM.
 
-This repository intentionally focuses on project layout only. Gameplay logic, combat rules, action resolution, and content generation are not implemented yet.
+This repository now includes a minimal exploration-mode gameplay loop for one player message. Combat rules, advanced persistence, authentication, and wider gameplay systems are still intentionally not implemented.
 
 ## Structure
 
@@ -148,3 +148,102 @@ DemiurgeProject/
 - Combat is intentionally not implemented, but this structure leaves room for a future combat plugin without flattening the backend.
 - Prompt files are kept separate from service logic and schemas so LLM-driven modules remain easy to navigate as they grow.
 
+## Local Setup
+
+### Backend
+
+Create and activate a virtual environment from the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install backend dependencies:
+
+```powershell
+pip install -r backend/requirements.txt
+```
+
+Optional Ollama-related environment overrides are documented in [backend/.env.example](D:/Else/Code/DemiurgeProject/backend/.env.example). The backend already has sensible defaults in [backend/config.py](D:/Else/Code/DemiurgeProject/backend/config.py), so you can start without setting anything if your local Ollama server uses the default URL and model.
+
+Start the backend in development mode:
+
+```powershell
+python -m backend.main
+```
+
+Or from the repository root:
+
+```powershell
+npm run back
+```
+
+### Frontend
+
+Install frontend dependencies:
+
+```powershell
+npm install --prefix frontend
+```
+
+Start the frontend in development mode:
+
+```powershell
+npm run dev --prefix frontend
+```
+
+Or from the repository root:
+
+```powershell
+npm run front
+```
+
+### Quick Start
+
+From the repository root, use two terminals:
+
+```powershell
+npm run back
+npm run front
+```
+
+If you want a quick reminder from the root, run:
+
+```powershell
+npm run dev:help
+```
+
+## Minimal Exploration Flow
+
+1. Start the backend.
+2. Start the frontend.
+3. Enter a message in the chat UI.
+4. The backend processes the message through:
+   - `router`
+   - `action_evaluation`
+   - `time_cost` estimation
+   - consequence layer
+   - state update layer
+   - world evolution hook
+   - `narrator`
+5. The frontend receives:
+   - the structured action result
+   - a narrative response
+   - updated visible state including canonical game time
+
+## Example End-To-End Message
+
+Player input:
+`"I ask Tomas what changed at the station."`
+
+Pipeline summary:
+- `router` classifies the action as `talk`
+- `action_evaluation` interprets the intent and estimates feasibility
+- time cost is computed in minutes and applied to canonical game time
+- nearby NPC reactions are generated for local NPCs only
+- `narrator` turns the structured result into player-facing text
+
+Ollama configuration defaults live in [backend/config.py](D:/Else/Code/DemiurgeProject/backend/config.py) and target:
+- `MODEL="gemma3:12b"`
+- `LLM_URL="http://localhost:11434/api/generate"`

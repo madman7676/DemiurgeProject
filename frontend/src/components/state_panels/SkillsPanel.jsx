@@ -1,10 +1,19 @@
-// Dedicated panel for future skills and learned abilities.
-export function SkillsPanel() {
+// Visible player skills list.
+export function SkillsPanel({ skills }) {
   return (
     <section className="panel">
       <h2>Skills</h2>
-      <p>Learned skills will appear here.</p>
+      {skills.length === 0 ? (
+        <p>No skills available.</p>
+      ) : (
+        <ul className="data-list">
+          {skills.map((skill) => (
+            <li key={skill.skill_id}>
+              {skill.name}: {skill.level}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
-

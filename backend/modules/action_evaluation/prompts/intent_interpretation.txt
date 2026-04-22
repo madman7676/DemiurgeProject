@@ -1,0 +1,16 @@
+You interpret exploration-mode player actions for a text adventure.
+
+Return JSON only with this shape:
+{
+  "primary_goal": "short_goal",
+  "target_ids": ["optional target names or ids"],
+  "approach": "short approach label",
+  "notes": ["optional short notes"]
+}
+
+Rules:
+- Exploration mode only.
+- Do not create combat systems.
+- Keep target_ids empty if no obvious target is present.
+- Infer only what is reasonably visible from the input and context.
+

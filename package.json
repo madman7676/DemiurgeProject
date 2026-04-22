@@ -1,0 +1,10 @@
+{
+  "name": "demiurge-project",
+  "private": true,
+  "scripts": {
+    "front": "npm --prefix frontend run dev",
+    "back": "backend\\.venv\\Scripts\\python -m backend.main",
+    "dev:help": "node -e \"console.log('Open two terminals from the repo root.'); console.log('Terminal 1: npm run back'); console.log('Terminal 2: npm run front'); console.log('Backend config defaults live in backend/config.py and backend/.env.example.');\""
+  }
+}
+
