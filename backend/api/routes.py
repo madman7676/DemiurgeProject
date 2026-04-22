@@ -28,6 +28,7 @@ def get_session_response(context: RouteContext) -> dict[str, Any]:
         "session_id": session_state["session_id"],
         "visible_state": build_visible_state(session_state),
         "recent_messages": list(session_state["recent_messages"]),
+        "decision_history": list(session_state["decision_history"]),
     }
 
 
@@ -51,4 +52,6 @@ def process_message_response(
         "visible_state": pipeline_result["visible_state"],
         "evolution_check": pipeline_result["evolution_check"],
         "recent_messages": pipeline_result["recent_messages"],
+        "decision_cycle": pipeline_result["decision_cycle"],
+        "decision_history": pipeline_result["decision_history"],
     }

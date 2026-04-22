@@ -1,6 +1,8 @@
 """Compatibility layer for session state contracts."""
 
 from backend.core.game_state.contracts import (
+    DecisionCycle,
+    DecisionEvent,
     GameSessionState,
     GameTime,
     SessionMessage,
@@ -8,6 +10,8 @@ from backend.core.game_state.contracts import (
 )
 
 __all__ = [
+    "DecisionCycle",
+    "DecisionEvent",
     "GameSessionState",
     "GameTime",
     "SessionMessage",

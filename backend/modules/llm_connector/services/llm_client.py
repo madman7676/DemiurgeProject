@@ -5,11 +5,11 @@ Other backend modules should call into this module instead of talking to the mod
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from typing import Protocol
-from urllib import error, request
+
+import requests
 
 from backend.config import Settings
 from backend.modules.llm_connector.schemas.llm_contracts import LLMGenerateResponse
@@ -39,20 +39,6 @@ class OllamaLLMClient:
             logger.info("Skipping Ollama call because the adapter is in fallback cooldown.")
             return self._build_fallback_response("Skipping request after recent Ollama failure.")
 
-        payload = {
-            "model": self._settings.model,
-            "prompt": user_prompt,
-            "system": system_prompt,
-            "stream": False,
-        }
-        encoded_payload = json.dumps(payload).encode("utf-8")
-        http_request = request.Request(
-            self._settings.llm_url,
-            data=encoded_payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-
         logger.info(
             "Calling Ollama model '%s' at %s",
             self._settings.model,
@@ -60,35 +46,55 @@ class OllamaLLMClient:
         )
 
         try:
-            with request.urlopen(
-                http_request,
+            response = requests.post(
+                self._settings.llm_url,
+                json=self._build_payload(system_prompt, user_prompt),
                 timeout=self._settings.llm_timeout_seconds,
-            ) as response:
-                raw_response = response.read().decode("utf-8")
-                response_data = json.loads(raw_response)
-        except (error.HTTPError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            )
+            response.raise_for_status()
+            response_data = response.json()
+        except (requests.RequestException, ValueError) as exc:
             self._skip_until = time.monotonic() + 10
             logger.warning("Ollama request failed: %s", exc)
             return self._build_fallback_response(str(exc))
 
-        if not isinstance(response_data, dict):
+        generated_text = self._extract_response_text(response_data)
+        if generated_text is None:
             self._skip_until = time.monotonic() + 10
-            logger.warning("Ollama returned a non-object response.")
-            return self._build_fallback_response("Ollama returned a non-object response.")
-
-        generated_text = response_data.get("response", "")
-        if not isinstance(generated_text, str) or not generated_text.strip():
             logger.warning("Ollama returned an empty or invalid response payload.")
             return self._build_fallback_response("Ollama returned an empty or invalid response.")
 
         self._skip_until = 0.0
         logger.info("Ollama response received successfully.")
         return {
-            "text": generated_text.strip(),
+            "text": generated_text,
             "provider": "ollama",
             "model": self._settings.model,
             "used_mock": False,
         }
+
+    def _build_payload(self, system_prompt: str, user_prompt: str) -> dict[str, object]:
+        """Build the minimal non-streaming Ollama request body."""
+
+        return {
+            "model": self._settings.model,
+            "prompt": user_prompt,
+            "system": system_prompt,
+            "stream": False,
+        }
+
+    def _extract_response_text(self, response_data: object) -> str | None:
+        """Extract generated text from the Ollama response payload."""
+
+        if not isinstance(response_data, dict):
+            return None
+
+        generated_text = response_data.get("response")
+        if not isinstance(generated_text, str):
+            return None
+
+        cleaned_text = generated_text.strip()
+        return cleaned_text or None
 
     def _build_fallback_response(self, error_text: str) -> LLMGenerateResponse:
         """Return an empty mock response so callers can use deterministic fallbacks."""

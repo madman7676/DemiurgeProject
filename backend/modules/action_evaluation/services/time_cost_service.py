@@ -11,11 +11,11 @@ from backend.modules.action_evaluation.schemas.action_evaluation_contracts impor
 
 
 BASE_MINUTES = {
-    "observe": 3,
-    "talk": 5,
-    "move": 8,
-    "wait": 4,
-    "interact": 6,
+    "inspection": 3,
+    "speech": 4,
+    "question": 4,
+    "movement": 8,
+    "idle": 4,
     "combat_attempt": 2,
 }
 
@@ -36,7 +36,7 @@ def estimate_time_cost(
         minutes += 3
     if any(keyword in lowered for keyword in ["quickly", "briefly"]):
         minutes = max(1, minutes - 2)
-    if action_category == "wait":
+    if action_category == "idle":
         explicit_wait = _parse_explicit_wait_minutes(lowered)
         if explicit_wait is not None:
             minutes = explicit_wait
@@ -59,4 +59,3 @@ def _parse_explicit_wait_minutes(raw_player_input: str) -> int | None:
         return max(1, int(minute_match.group(1)))
 
     return None
-

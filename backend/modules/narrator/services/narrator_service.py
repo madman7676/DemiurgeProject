@@ -31,7 +31,9 @@ class NarratorService:
         """Convert a structured action result into a short narrative response."""
 
         prompt_payload = {
+            "raw_player_input": action_result["raw_player_input"],
             "action_category": route_decision["action_category"],
+            "interpreted_intent": action_result["interpreted_intent"],
             "outcome_summary": action_result["outcome_summary"],
             "time_cost": action_result["time_cost"],
             "npc_reactions": action_result["npc_reactions"],

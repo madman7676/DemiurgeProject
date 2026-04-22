@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from backend.core.game_state.contracts import (
+    DecisionCycle,
     GameSessionState,
     GameTime,
     SessionMessage,
@@ -50,6 +51,7 @@ def create_initial_session_state() -> GameSessionState:
         "current_time": _create_initial_time(),
         "discovered_rules": [],
         "recent_messages": [],
+        "decision_history": [],
         "turn_count": 0,
         "last_evolution_check_turn": 0,
     }
@@ -86,6 +88,15 @@ def append_message(
     """Append a player or assistant message to the current session."""
 
     session_state["recent_messages"].append({"role": role, "text": text})
+
+
+def append_decision_cycle(
+    session_state: GameSessionState,
+    decision_cycle: DecisionCycle,
+) -> None:
+    """Append one developer-facing decision cycle to the in-memory session."""
+
+    session_state["decision_history"].append(deepcopy(decision_cycle))
 
 
 def advance_game_time(current_time: GameTime, minutes_to_add: int) -> GameTime:
@@ -132,4 +143,3 @@ class InMemorySessionStore:
         """Replace the in-memory session with a client-provided snapshot."""
 
         self._session_state = deepcopy(session_state)
-

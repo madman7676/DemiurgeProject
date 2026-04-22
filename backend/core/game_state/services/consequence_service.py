@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import logging
 
 from backend.core.game_state.contracts import GameSessionState
 from backend.core.npc_state.services.local_reaction_service import (
@@ -11,6 +12,8 @@ from backend.core.npc_state.services.local_reaction_service import (
 from backend.modules.action_evaluation.schemas.action_evaluation_contracts import (
     ActionProcessingContract,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def apply_consequence_layer(
@@ -29,6 +32,9 @@ def apply_consequence_layer(
     )
     updated_result["npc_reactions"] = npc_reactions
 
+    primary_goal = updated_result["interpreted_intent"].get("primary_goal", "").strip()
+    raw_input = updated_result["raw_player_input"].strip()
+
     if action_category == "combat_attempt":
         updated_result["outcome_summary"] = (
             "The action veers toward combat, but only exploration actions are "
@@ -37,26 +43,30 @@ def apply_consequence_layer(
         updated_result["narration_notes"].append(
             "Acknowledge the attempted aggression without entering combat mode."
         )
-    elif action_category == "move":
+    elif action_category == "movement":
         updated_result["outcome_summary"] = (
-            "The player spends time repositioning and reorienting within the current area."
+            f"You attempt to move with a clear destination in mind: {primary_goal or raw_input}."
         )
-    elif action_category == "talk":
+    elif action_category == "speech":
         updated_result["outcome_summary"] = (
-            "The player directs attention toward a nearby character and invites a response."
+            f"You speak plainly and try to make contact: {primary_goal or raw_input}."
         )
-    elif action_category == "observe":
+    elif action_category == "question":
         updated_result["outcome_summary"] = (
-            "The player slows down to inspect the scene and gather details."
+            f"You ask for clarity about what is happening: {primary_goal or raw_input}."
         )
-    elif action_category == "wait":
+    elif action_category == "inspection":
         updated_result["outcome_summary"] = (
-            "The player pauses, lets time pass, and watches for subtle shifts."
+            f"You pause to study the scene more closely: {primary_goal or raw_input}."
+        )
+    elif action_category == "idle":
+        updated_result["outcome_summary"] = (
+            f"You let a brief stretch of time pass while staying alert: {primary_goal or raw_input}."
         )
     else:
         updated_result["outcome_summary"] = (
-            "The player tests the space carefully and waits to see what changes."
+            f"You act on a simple exploratory impulse: {primary_goal or raw_input}."
         )
 
+    logger.info("Final outcome summary: %s", updated_result["outcome_summary"])
     return updated_result
-

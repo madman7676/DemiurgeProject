@@ -26,6 +26,22 @@ class SessionMessage(TypedDict):
     text: str
 
 
+class DecisionEvent(TypedDict):
+    """Short developer-facing description of a gameplay pipeline decision."""
+
+    source: str
+    message: str
+    details: dict[str, object]
+
+
+class DecisionCycle(TypedDict):
+    """Decision events collected for one processed player message."""
+
+    turn: int
+    raw_player_input: str
+    events: list[DecisionEvent]
+
+
 class VisibleGameState(TypedDict):
     """Visible state returned to the frontend after each action."""
 
@@ -46,6 +62,6 @@ class GameSessionState(TypedDict):
     current_time: GameTime
     discovered_rules: list[DiscoveredRuleCandidate]
     recent_messages: list[SessionMessage]
+    decision_history: list[DecisionCycle]
     turn_count: int
     last_evolution_check_turn: int
-

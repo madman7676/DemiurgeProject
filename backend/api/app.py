@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from backend.api.routes import (
     RouteContext,
@@ -25,6 +26,13 @@ from backend.modules.action_evaluation.services.action_evaluation_service import
 from backend.modules.llm_connector.services.llm_client import OllamaLLMClient
 from backend.modules.narrator.services.narrator_service import NarratorService
 from backend.modules.router.services.router_service import RouterService
+
+
+class MessageRequest(BaseModel):
+    """Request payload for a single exploration-mode player message."""
+
+    message: str
+    session_state: dict[str, Any] | None = None
 
 
 def create_route_context(settings: Settings) -> RouteContext:
@@ -74,15 +82,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return get_session_response(app.state.route_context)
 
     @app.post("/api/message")
-    def post_message(payload: dict[str, Any]) -> dict[str, Any]:
+    def post_message(payload: MessageRequest) -> dict[str, Any]:
         """Process a single player message through the exploration pipeline."""
 
-        raw_message = str(payload.get("message", "")).strip()
+        request_payload = payload.model_dump(exclude_none=True)
+        raw_message = request_payload["message"].strip()
         if not raw_message:
             return JSONResponse(
                 status_code=400,
                 content={"error": "The 'message' field is required."},
             )
-        return process_message_response(payload, app.state.route_context)
+        request_payload["message"] = raw_message
+        return process_message_response(request_payload, app.state.route_context)
 
     return app

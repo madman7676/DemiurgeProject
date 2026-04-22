@@ -24,9 +24,9 @@ def build_local_npc_reactions(
             continue
 
         npc_name = npc["identity"]["name"].lower()
-        is_addressed = npc_name in lowered_input or action_category == "talk"
+        is_addressed = npc_name in lowered_input or action_category in {"speech", "question"}
 
-        if not is_addressed and action_category not in {"observe", "wait"}:
+        if not is_addressed and action_category not in {"inspection", "idle"}:
             continue
 
         if any(keyword in lowered_input for keyword in ["threaten", "attack", "kill", "fight"]):
@@ -35,7 +35,7 @@ def build_local_npc_reactions(
         elif any(keyword in lowered_input for keyword in ["hello", "ask", "speak", "talk", "please"]):
             reaction_type = "attentive"
             summary = f"{npc['identity']['name']} gives you their attention."
-        elif action_category == "observe":
+        elif action_category == "inspection":
             reaction_type = "watched"
             summary = f"{npc['identity']['name']} notices your careful attention."
         else:
@@ -52,4 +52,3 @@ def build_local_npc_reactions(
         break
 
     return reactions
-
