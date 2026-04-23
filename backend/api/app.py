@@ -42,7 +42,7 @@ def create_route_context(settings: Settings) -> RouteContext:
     llm_adapter = OllamaLLMClient(settings)
     exploration_pipeline = ExplorationPipeline(
         session_store=session_store,
-        router_service=RouterService(),
+        router_service=RouterService(llm_adapter=llm_adapter),
         action_evaluation_service=ActionEvaluationService(llm_adapter=llm_adapter),
         narrator_service=NarratorService(llm_adapter=llm_adapter),
     )

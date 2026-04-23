@@ -9,6 +9,14 @@ from backend.core.player_state.contracts import PlayerStateContract
 from backend.core.world_rules.contracts import DiscoveredRuleCandidate, WorldRulesDocument
 
 
+class QuickChoice(TypedDict):
+    """Previously presented player choice that can be referenced tersely."""
+
+    choice_id: str
+    label: str
+    intent_text: str
+
+
 class GameTime(TypedDict):
     """Structured in-world time suitable for future calendar expansion."""
 
@@ -61,6 +69,7 @@ class GameSessionState(TypedDict):
     npc_states: list[NPCStateContract]
     current_time: GameTime
     discovered_rules: list[DiscoveredRuleCandidate]
+    last_presented_choices: list[QuickChoice]
     recent_messages: list[SessionMessage]
     decision_history: list[DecisionCycle]
     turn_count: int

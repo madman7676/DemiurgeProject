@@ -37,15 +37,18 @@ class ActionEvaluationService:
         """Interpret the action, estimate feasibility, and attach time cost."""
 
         logger.info("Evaluating raw player input: %s", raw_player_input)
+        expanded_player_intent = route_decision["expanded_player_intent"]
         interpreted_intent = self._interpret_intent(
             raw_player_input=raw_player_input,
+            expanded_player_intent=expanded_player_intent,
+            route_decision=route_decision,
             action_category=route_decision["action_category"],
             session_state=session_state,
         )
         logger.info("Interpreted intent: %s", interpreted_intent)
         time_cost = estimate_time_cost(
             action_category=route_decision["action_category"],
-            raw_player_input=raw_player_input,
+            raw_player_input=expanded_player_intent,
             interpreted_intent=interpreted_intent,
         )
         roll_needed = self._roll_needed(route_decision["action_category"], raw_player_input)
@@ -57,6 +60,7 @@ class ActionEvaluationService:
         return {
             "action_type": route_decision["action_category"],
             "raw_player_input": raw_player_input,
+            "expanded_player_intent": expanded_player_intent,
             "interpreted_intent": interpreted_intent,
             "feasibility_score": feasibility_score,
             "roll_needed": roll_needed,
@@ -65,14 +69,17 @@ class ActionEvaluationService:
             "npc_reactions": [],
             "time_cost": time_cost,
             "narration_notes": [
-                f"Route reasoning: {route_decision['reasoning']}",
+                f"Route reasoning: {route_decision['routing_reason']}",
                 "Keep the response focused on exploration mode.",
-            ],
+            ]
+            + route_decision["narration_notes"],
         }
 
     def _interpret_intent(
         self,
         raw_player_input: str,
+        expanded_player_intent: str,
+        route_decision: RouteDecision,
         action_category: str,
         session_state: GameSessionState,
     ) -> InterpretedIntent:
@@ -90,6 +97,9 @@ class ActionEvaluationService:
         prompt_payload = {
             "action_category": action_category,
             "raw_player_input": raw_player_input,
+            "expanded_player_intent": expanded_player_intent,
+            "router_primary_intent": route_decision["primary_intent"],
+            "router_possible_targets": route_decision["possible_targets"],
             "visible_context": visible_context,
         }
         llm_response = self._llm_adapter.generate_text(
@@ -113,7 +123,11 @@ class ActionEvaluationService:
                     llm_response["text"],
                 )
 
-        return self._fallback_intent(raw_player_input, action_category, visible_context["nearby_npcs"])
+        return self._fallback_intent(
+            expanded_player_intent,
+            action_category,
+            visible_context["nearby_npcs"],
+        )
 
     def _normalize_json_text(self, raw_text: str) -> str:
         """Normalize LLM JSON output before parsing."""

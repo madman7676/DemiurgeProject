@@ -19,8 +19,12 @@ from backend.modules.action_evaluation.schemas.action_evaluation_contracts impor
 from backend.modules.action_evaluation.services.action_evaluation_service import (
     ActionEvaluationService,
 )
+from backend.modules.feature_modules.services.feature_registry import build_available_modules
 from backend.modules.narrator.services.narrator_service import NarratorService
-from backend.modules.router.schemas.router_contracts import RouteDecision
+from backend.modules.router.schemas.router_contracts import (
+    RouteDecision,
+    RouterAgentInput,
+)
 from backend.modules.router.services.router_service import RouterService
 from backend.modules.world_evolution.schemas.world_evolution_contracts import (
     WorldEvolutionCheckResult,
@@ -65,14 +69,55 @@ class ExplorationPipeline:
         cycle_turn = session_state["turn_count"] + 1
         decision_events: list[DecisionEvent] = []
 
-        route = self._router_service.classify_player_input(raw_player_input)
+        active_features = [
+            feature["feature_id"]
+            for feature in session_state["world_rules"]["active_features"]
+            if feature["enabled"]
+        ]
+        router_input: RouterAgentInput = {
+            "raw_player_input": raw_player_input,
+            "game_mode": session_state["mode"],
+            "scene_context": {
+                "game_mode": session_state["mode"],
+                "location": session_state["player_state"]["current_location"].get(
+                    "detail",
+                    session_state["player_state"]["current_location"]["region_id"],
+                ),
+                "time_summary": (
+                    f"day {session_state['current_time']['day']} "
+                    f"{session_state['current_time']['hour']:02d}:{session_state['current_time']['minute']:02d}"
+                ),
+            },
+            "visible_entities_summary": [
+                {
+                    "entity_id": npc["identity"]["npc_id"],
+                    "name": npc["identity"]["name"],
+                    "role": npc["role"],
+                }
+                for npc in session_state["npc_states"]
+                if npc["location"]["region_id"]
+                == session_state["player_state"]["current_location"]["region_id"]
+            ],
+            "available_modules": build_available_modules(active_features),
+            "last_presented_choices": session_state["last_presented_choices"],
+            "active_features": active_features,
+        }
+
+        route = self._router_service.route_message(router_input)
         decision_events.append(
             {
                 "source": "router",
-                "message": f"Classified input as {route['action_category']}.",
+                "message": f"Expanded intent routed as {route['primary_intent']}.",
                 "details": {
-                    "category": route["action_category"],
-                    "reasoning": route["reasoning"],
+                    "action_category": route["action_category"],
+                    "raw_player_input": raw_player_input,
+                    "expanded_player_intent": route["expanded_player_intent"],
+                    "primary_intent": route["primary_intent"],
+                    "secondary_elements": route["secondary_elements"],
+                    "possible_targets": route["possible_targets"],
+                    "requested_agents": route["requested_agents"],
+                    "narration_notes": route["narration_notes"],
+                    "routing_reason": route["routing_reason"],
                 },
             }
         )
@@ -163,6 +208,7 @@ class ExplorationPipeline:
                 "message": "Prepared narrative rendering from the resolved action.",
                 "details": {
                     "raw_player_input": raw_player_input,
+                    "expanded_player_intent": route["expanded_player_intent"],
                     "narrative_intent": action_result["outcome_summary"],
                 },
             }

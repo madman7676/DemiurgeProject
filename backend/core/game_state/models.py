@@ -5,6 +5,7 @@ from backend.core.game_state.contracts import (
     DecisionEvent,
     GameSessionState,
     GameTime,
+    QuickChoice,
     SessionMessage,
     VisibleGameState,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "DecisionEvent",
     "GameSessionState",
     "GameTime",
+    "QuickChoice",
     "SessionMessage",
     "VisibleGameState",
 ]

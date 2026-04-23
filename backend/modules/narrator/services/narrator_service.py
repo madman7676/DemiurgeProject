@@ -32,7 +32,9 @@ class NarratorService:
 
         prompt_payload = {
             "raw_player_input": action_result["raw_player_input"],
+            "expanded_player_intent": action_result["expanded_player_intent"],
             "action_category": route_decision["action_category"],
+            "primary_intent": route_decision["primary_intent"],
             "interpreted_intent": action_result["interpreted_intent"],
             "outcome_summary": action_result["outcome_summary"],
             "time_cost": action_result["time_cost"],

@@ -50,6 +50,7 @@ def create_initial_session_state() -> GameSessionState:
         "npc_states": [_load_json("npc_state/data/npc.example.json")],
         "current_time": _create_initial_time(),
         "discovered_rules": [],
+        "last_presented_choices": [],
         "recent_messages": [],
         "decision_history": [],
         "turn_count": 0,

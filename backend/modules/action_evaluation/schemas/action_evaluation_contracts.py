@@ -54,6 +54,7 @@ class ActionProcessingContract(TypedDict):
 
     action_type: str
     raw_player_input: str
+    expanded_player_intent: str
     interpreted_intent: InterpretedIntent
     feasibility_score: float
     roll_needed: bool
