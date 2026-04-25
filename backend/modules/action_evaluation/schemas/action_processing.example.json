@@ -19,6 +19,14 @@
   "side_effects": [
     "The stationmaster becomes more careful about what he reveals next."
   ],
+  "proposed_side_effects": [
+    "The stationmaster becomes more careful about what he reveals next."
+  ],
+  "applied_side_effects": [
+    "The stationmaster becomes more careful about what he reveals next."
+  ],
+  "quality_side_effect_chance": 0.075,
+  "quality_side_effect_applied": true,
   "revealed_information": [
     "The station is under pressure from recent disruptions."
   ],

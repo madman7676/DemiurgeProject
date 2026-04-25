@@ -131,12 +131,12 @@ def _apply_state_intents(
             }
         )
 
-    for side_effect in action_result["side_effects"]:
+    for side_effect in action_result["applied_side_effects"]:
         state_changes.append(
             {
                 "scope": "judge_result",
                 "entity_id": "action",
-                "field": "side_effects",
+                "field": "applied_side_effects",
                 "summary": side_effect,
             }
         )

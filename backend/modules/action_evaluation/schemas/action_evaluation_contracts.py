@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from backend.core.world_rules.contracts import DiscoveredRuleCandidate
 
@@ -63,6 +63,37 @@ class TimeCost(TypedDict):
     unit: str
 
 
+class ActingCharacterInput(TypedDict):
+    """Actor-centric snapshot passed into Judge for one attempted action."""
+
+    name: str
+    description: str
+    state: dict[str, Any]
+    capabilities: dict[str, Any]
+    inventory: list[dict[str, Any]]
+    known_facts: list[str]
+    relationships: dict[str, Any]
+
+
+class ActionEvaluationInput(TypedDict):
+    """Structured Judge input used for LLM evaluation."""
+
+    raw_input: str
+    attempted_action: str
+    acting_character: ActingCharacterInput
+    router_output: dict[str, Any]
+    game_mode: str
+    scene_context: dict[str, Any]
+    visible_entities: list[dict[str, Any]]
+    world_rules: dict[str, Any]
+    recent_context: list[dict[str, Any]]
+    raw_player_input: NotRequired[str]
+    expanded_player_intent: NotRequired[str]
+    player_state: NotRequired[dict[str, Any]]
+    player_capabilities: NotRequired[dict[str, Any]]
+    inventory: NotRequired[list[dict[str, Any]]]
+
+
 class ActionProcessingContract(TypedDict):
     """Judge result plus downstream-resolved fields for one player action."""
 
@@ -77,6 +108,10 @@ class ActionProcessingContract(TypedDict):
     what_fails: list[str]
     blockers: list[str]
     side_effects: list[str]
+    proposed_side_effects: list[str]
+    applied_side_effects: list[str]
+    quality_side_effect_chance: float
+    quality_side_effect_applied: bool
     revealed_information: list[str]
     risk_flags: list[str]
     state_intents: StateIntentSignals

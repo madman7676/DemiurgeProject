@@ -42,7 +42,9 @@ class NarratorService:
             "what_succeeds": action_result["what_succeeds"],
             "what_fails": action_result["what_fails"],
             "blockers": action_result["blockers"],
-            "side_effects": action_result["side_effects"],
+            "side_effects": action_result["applied_side_effects"],
+            "proposed_side_effects": action_result["proposed_side_effects"],
+            "quality_side_effect_applied": action_result["quality_side_effect_applied"],
             "revealed_information": action_result["revealed_information"],
             "risk_flags": action_result["risk_flags"],
             "state_intents": action_result["state_intents"],
@@ -75,6 +77,9 @@ class NarratorService:
             fragments.append(action_result["what_succeeds"][0])
         elif action_result["what_fails"]:
             fragments.append(action_result["what_fails"][0])
+
+        if action_result["applied_side_effects"]:
+            fragments.append(f"Side effect: {action_result['applied_side_effects'][0]}.")
 
         if action_result["revealed_information"]:
             fragments.append(f"You learn: {action_result['revealed_information'][0]}.")

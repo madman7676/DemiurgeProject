@@ -131,10 +131,13 @@ class ExplorationPipeline:
                 "source": "action_evaluation",
                 "message": "Judge resolved the attempted action.",
                 "details": {
+                    "raw_player_input": action_result["raw_player_input"],
+                    "expanded_player_intent": action_result["expanded_player_intent"],
                     "action_result": action_result["action_result"],
                     "outcome_quality": action_result["outcome_quality"],
                     "attempt_summary": action_result["attempt_summary"],
                     "blockers": action_result["blockers"],
+                    "side_effects": action_result["proposed_side_effects"],
                     "reasoning_short": action_result["reasoning_short"],
                 },
             }
@@ -182,6 +185,11 @@ class ExplorationPipeline:
                 "source": "consequence",
                 "message": "Determined the main outcome summary.",
                 "details": {
+                    "outcome_quality": action_result["outcome_quality"],
+                    "quality_side_effect_chance": action_result["quality_side_effect_chance"],
+                    "quality_side_effect_applied": action_result["quality_side_effect_applied"],
+                    "proposed_side_effects": action_result["proposed_side_effects"],
+                    "applied_side_effects": action_result["applied_side_effects"],
                     "side_effects": action_result["side_effects"],
                     "revealed_information": action_result["revealed_information"],
                     "risk_flags": action_result["risk_flags"],

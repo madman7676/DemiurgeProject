@@ -9,7 +9,9 @@ from typing import Any
 
 from backend.core.game_state.contracts import GameSessionState
 from backend.modules.action_evaluation.schemas.action_evaluation_contracts import (
+    ActionEvaluationInput,
     ActionProcessingContract,
+    ActingCharacterInput,
     InterpretedIntent,
     StateIntentSignals,
     TimeHints,
@@ -51,9 +53,10 @@ class ActionEvaluationService:
             session_state=session_state,
         )
         logger.info("Judge input primary intent: %s", route_decision["primary_intent"])
+        logger.info("Judge attempted action: %s", judge_input["attempted_action"])
         llm_response = self._llm_adapter.generate_text(
             system_prompt=self._system_prompt,
-            user_prompt=json.dumps(judge_input, ensure_ascii=False),
+            user_prompt=json.dumps(judge_input, ensure_ascii=False, indent=2),
         )
         judge_output = self._resolve_judge_output(
             llm_text=llm_response["text"],
@@ -85,7 +88,7 @@ class ActionEvaluationService:
         expanded_player_intent: str,
         route_decision: RouteDecision,
         session_state: GameSessionState,
-    ) -> dict[str, Any]:
+    ) -> ActionEvaluationInput:
         """Build structured Judge input from the routed action and current state."""
 
         player_state = session_state.get("player_state", {})
@@ -103,8 +106,12 @@ class ActionEvaluationService:
             if npc["location"]["region_id"]
             == player_state.get("current_location", {}).get("region_id")
         ]
-        return {
-            "raw_player_input": raw_player_input or "",
+        acting_character = self._build_acting_character(player_state)
+        attempted_action = expanded_player_intent.strip() or raw_player_input.strip()
+        judge_input: ActionEvaluationInput = {
+            "raw_input": raw_player_input or "",
+            "attempted_action": attempted_action,
+            "acting_character": acting_character,
             "router_output": route_decision,
             "game_mode": session_state.get("mode", "exploration") or "exploration",
             "scene_context": {
@@ -112,15 +119,6 @@ class ActionEvaluationService:
                 "current_time": session_state.get("current_time", {}),
                 "world_summary": session_state.get("world_rules", {}).get("identity", {}),
             },
-            "player_state": player_state,
-            "player_capabilities": {
-                "race": player_state.get("race", "Unknown"),
-                "player_class": player_state.get("player_class", "Unknown"),
-                "background": player_state.get("background", ""),
-                "stats": player_state.get("stats", []),
-                "skills": player_state.get("skills", []),
-            },
-            "inventory": inventory,
             "visible_entities": visible_entities,
             "world_rules": {
                 "hard_rules": session_state.get("world_rules", {}).get("hard_rules", []),
@@ -128,7 +126,53 @@ class ActionEvaluationService:
                 "meta_rules": session_state.get("world_rules", {}).get("meta_rules", []),
             },
             "recent_context": recent_messages,
+            # Compatibility fields kept temporarily for downstream prompt stability.
+            "raw_player_input": raw_player_input or "",
             "expanded_player_intent": expanded_player_intent,
+            "player_state": player_state,
+            "player_capabilities": acting_character["capabilities"],
+            "inventory": inventory,
+        }
+        logger.debug("Judge acting_character input: %s", acting_character)
+        return judge_input
+
+    def _build_acting_character(self, player_state: dict[str, Any]) -> ActingCharacterInput:
+        """Build an actor-style snapshot without treating the player as privileged."""
+
+        identity = player_state.get("identity", {})
+        status_effects = player_state.get("status_effects", [])
+        current_location = player_state.get("current_location", {})
+        relationships = {
+            "party_links": player_state.get("party_links", []),
+        }
+        known_facts = [f"current_location:{current_location.get('region_id', 'unknown')}"]
+        if current_location.get("detail"):
+            known_facts.append(f"location_detail:{current_location['detail']}")
+
+        description_parts = [
+            player_state.get("race", "").strip(),
+            player_state.get("player_class", "").strip(),
+            player_state.get("background", "").strip(),
+        ]
+        return {
+            "name": str(identity.get("name", "Unknown")).strip() or "Unknown",
+            "description": ", ".join(part for part in description_parts if part),
+            "state": {
+                "identity": identity,
+                "current_location": current_location,
+                "status_effects": status_effects,
+                "currencies": player_state.get("currencies", []),
+            },
+            "capabilities": {
+                "race": player_state.get("race", "Unknown"),
+                "class": player_state.get("player_class", "Unknown"),
+                "background": player_state.get("background", ""),
+                "stats": player_state.get("stats", []),
+                "skills": player_state.get("skills", []),
+            },
+            "inventory": player_state.get("inventory", []),
+            "known_facts": known_facts,
+            "relationships": relationships,
         }
 
     def _resolve_judge_output(
@@ -218,6 +262,10 @@ class ActionEvaluationService:
             "what_fails": self._coerce_string_list(parsed.get("what_fails", [])),
             "blockers": self._coerce_string_list(parsed.get("blockers", [])),
             "side_effects": self._coerce_string_list(parsed.get("side_effects", [])),
+            "proposed_side_effects": self._coerce_string_list(parsed.get("side_effects", [])),
+            "applied_side_effects": [],
+            "quality_side_effect_chance": 0.0,
+            "quality_side_effect_applied": False,
             "revealed_information": self._coerce_string_list(parsed.get("revealed_information", [])),
             "risk_flags": self._coerce_string_list(parsed.get("risk_flags", [])),
             "state_intents": state_intents,
@@ -293,6 +341,10 @@ class ActionEvaluationService:
             "what_fails": [],
             "blockers": ["Judge could not safely evaluate the action."],
             "side_effects": [],
+            "proposed_side_effects": [],
+            "applied_side_effects": [],
+            "quality_side_effect_chance": 0.0,
+            "quality_side_effect_applied": False,
             "revealed_information": [],
             "risk_flags": [],
             "state_intents": {
