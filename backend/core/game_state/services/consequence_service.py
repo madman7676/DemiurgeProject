@@ -32,42 +32,34 @@ def apply_consequence_layer(
     )
     updated_result["npc_reactions"] = npc_reactions
 
-    primary_goal = updated_result["interpreted_intent"].get("primary_goal", "").strip()
-    raw_input = updated_result["raw_player_input"].strip()
-    expanded_input = updated_result["expanded_player_intent"].strip()
-
+    updated_result["outcome_summary"] = _build_outcome_summary(updated_result, action_category)
     if action_category == "combat_attempt":
-        updated_result["outcome_summary"] = (
-            "The action veers toward combat, but only exploration actions are "
-            "supported in this prototype."
-        )
         updated_result["narration_notes"].append(
             "Acknowledge the attempted aggression without entering combat mode."
-        )
-    elif action_category == "movement":
-        updated_result["outcome_summary"] = (
-            f"You attempt to move with a clear destination in mind: {primary_goal or expanded_input or raw_input}."
-        )
-    elif action_category == "speech":
-        updated_result["outcome_summary"] = (
-            f"You speak plainly and try to make contact: {primary_goal or expanded_input or raw_input}."
-        )
-    elif action_category == "question":
-        updated_result["outcome_summary"] = (
-            f"You ask for clarity about what is happening: {primary_goal or expanded_input or raw_input}."
-        )
-    elif action_category == "inspection":
-        updated_result["outcome_summary"] = (
-            f"You pause to study the scene more closely: {primary_goal or expanded_input or raw_input}."
-        )
-    elif action_category == "idle":
-        updated_result["outcome_summary"] = (
-            f"You let a brief stretch of time pass while staying alert: {primary_goal or expanded_input or raw_input}."
-        )
-    else:
-        updated_result["outcome_summary"] = (
-            f"You act on a simple exploratory impulse: {primary_goal or expanded_input or raw_input}."
         )
 
     logger.info("Final outcome summary: %s", updated_result["outcome_summary"])
     return updated_result
+
+
+def _build_outcome_summary(
+    action_result: ActionProcessingContract,
+    action_category: str,
+) -> str:
+    """Build a concise consequence summary from Judge output."""
+
+    summary = action_result["attempt_summary"].strip() or "Unable to evaluate action."
+    if action_result["action_result"] == "blocked" and action_result["blockers"]:
+        summary = f"{summary} Blocked by: {action_result['blockers'][0]}."
+    elif action_result["what_succeeds"]:
+        summary = f"{summary} Success focus: {action_result['what_succeeds'][0]}."
+    elif action_result["what_fails"]:
+        summary = f"{summary} Failure focus: {action_result['what_fails'][0]}."
+
+    if action_result["side_effects"]:
+        summary = f"{summary} Side effect: {action_result['side_effects'][0]}."
+    if action_result["revealed_information"]:
+        summary = f"{summary} Discovery: {action_result['revealed_information'][0]}."
+    if action_category == "combat_attempt":
+        summary = f"{summary} Exploration mode prevents combat resolution."
+    return summary

@@ -36,6 +36,17 @@ class NarratorService:
             "action_category": route_decision["action_category"],
             "primary_intent": route_decision["primary_intent"],
             "interpreted_intent": action_result["interpreted_intent"],
+            "action_result": action_result["action_result"],
+            "outcome_quality": action_result["outcome_quality"],
+            "attempt_summary": action_result["attempt_summary"],
+            "what_succeeds": action_result["what_succeeds"],
+            "what_fails": action_result["what_fails"],
+            "blockers": action_result["blockers"],
+            "side_effects": action_result["side_effects"],
+            "revealed_information": action_result["revealed_information"],
+            "risk_flags": action_result["risk_flags"],
+            "state_intents": action_result["state_intents"],
+            "reasoning_short": action_result["reasoning_short"],
             "outcome_summary": action_result["outcome_summary"],
             "time_cost": action_result["time_cost"],
             "npc_reactions": action_result["npc_reactions"],
@@ -56,7 +67,20 @@ class NarratorService:
     def _render_fallback_narrative(self, action_result: ActionProcessingContract) -> str:
         """Fallback narration used when the local LLM is unavailable."""
 
-        fragments = [action_result["outcome_summary"]]
+        fragments = [action_result["attempt_summary"]]
+
+        if action_result["action_result"] == "blocked" and action_result["blockers"]:
+            fragments.append(f"Blocked by {action_result['blockers'][0]}.")
+        elif action_result["what_succeeds"]:
+            fragments.append(action_result["what_succeeds"][0])
+        elif action_result["what_fails"]:
+            fragments.append(action_result["what_fails"][0])
+
+        if action_result["revealed_information"]:
+            fragments.append(f"You learn: {action_result['revealed_information'][0]}.")
+
+        if action_result["outcome_summary"]:
+            fragments.insert(0, action_result["outcome_summary"])
 
         if action_result["npc_reactions"]:
             fragments.append(action_result["npc_reactions"][0]["summary"])

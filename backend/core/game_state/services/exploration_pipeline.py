@@ -129,11 +129,13 @@ class ExplorationPipeline:
         decision_events.append(
             {
                 "source": "action_evaluation",
-                "message": "Interpreted player intent and assigned feasibility.",
+                "message": "Judge resolved the attempted action.",
                 "details": {
-                    "primary_goal": action_result["interpreted_intent"]["primary_goal"],
-                    "approach": action_result["interpreted_intent"]["approach"],
-                    "feasibility_score": action_result["feasibility_score"],
+                    "action_result": action_result["action_result"],
+                    "outcome_quality": action_result["outcome_quality"],
+                    "attempt_summary": action_result["attempt_summary"],
+                    "blockers": action_result["blockers"],
+                    "reasoning_short": action_result["reasoning_short"],
                 },
             }
         )
@@ -142,6 +144,9 @@ class ExplorationPipeline:
                 "source": "time_cost",
                 "message": "Assigned in-world time cost.",
                 "details": {
+                    "duration_class": action_result["time_hints"]["duration_class"],
+                    "effort_level": action_result["time_hints"]["effort_level"],
+                    "interrupted": action_result["time_hints"]["interrupted"],
                     "amount": action_result["time_cost"]["amount"],
                     "unit": action_result["time_cost"]["unit"],
                 },
@@ -177,6 +182,10 @@ class ExplorationPipeline:
                 "source": "consequence",
                 "message": "Determined the main outcome summary.",
                 "details": {
+                    "side_effects": action_result["side_effects"],
+                    "revealed_information": action_result["revealed_information"],
+                    "risk_flags": action_result["risk_flags"],
+                    "state_intents": action_result["state_intents"],
                     "outcome_summary": action_result["outcome_summary"],
                 },
             }

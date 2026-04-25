@@ -1,39 +1,50 @@
 {
-  "action_type": "persuade",
-  "raw_player_input": "I ask Tomas to trust me with the rail manifest.",
+  "action_type": "question",
+  "raw_player_input": "I ask Tomas what changed at the station.",
+  "expanded_player_intent": "ask Tomas what changed at the station",
   "interpreted_intent": {
-    "primary_goal": "gain_information",
-    "target_ids": ["npc_stationmaster_01"],
-    "approach": "persuasion"
+    "primary_goal": "ask for information",
+    "target_ids": ["Tomas Vey"],
+    "approach": "question",
+    "notes": []
   },
-  "feasibility_score": 0.68,
-  "roll_needed": true,
-  "roll_result": {
-    "skill_id": "negotiation",
-    "difficulty": 12
+  "action_result": "success",
+  "outcome_quality": 63,
+  "attempt_summary": "Tomas answers cautiously and confirms that the station is under unusual strain.",
+  "what_succeeds": [
+    "The player gets a partial explanation from Tomas."
+  ],
+  "what_fails": [],
+  "blockers": [],
+  "side_effects": [
+    "The stationmaster becomes more careful about what he reveals next."
+  ],
+  "revealed_information": [
+    "The station is under pressure from recent disruptions."
+  ],
+  "risk_flags": [
+    "Conversation may close off if pushed too aggressively."
+  ],
+  "state_intents": {
+    "position_change": null,
+    "resource_changes": {},
+    "status_changes": [],
+    "relationship_signals": ["cautious openness from Tomas"],
+    "environment_changes": []
   },
-  "outcome_summary": "The player attempts to convince Tomas to share guarded information.",
-  "state_changes": [
-    {
-      "scope": "npc_state",
-      "entity_id": "npc_stationmaster_01",
-      "field": "relationship_to_player.trust",
-      "summary": "Trust may improve slightly on success."
-    }
-  ],
-  "npc_reactions": [
-    {
-      "npc_id": "npc_stationmaster_01",
-      "reaction_type": "cautious_interest",
-      "summary": "Tomas listens, but remains guarded."
-    }
-  ],
+  "time_hints": {
+    "duration_class": "short",
+    "effort_level": "medium",
+    "interrupted": false
+  },
+  "reasoning_short": "The question is reasonable, Tomas is present, and the player is asking within normal social bounds.",
+  "outcome_summary": "Tomas answers cautiously and confirms that the station is under unusual strain. Success focus: The player gets a partial explanation from Tomas.. Side effect: The stationmaster becomes more careful about what he reveals next.. Discovery: The station is under pressure from recent disruptions..",
+  "state_changes": [],
+  "npc_reactions": [],
   "time_cost": {
-    "amount": 10,
+    "amount": 8,
     "unit": "minute"
   },
-  "narration_notes": [
-    "Emphasize Tomas's hesitation.",
-    "Keep the tone grounded and tense."
-  ]
+  "narration_notes": [],
+  "discovered_rule_candidate": null
 }
