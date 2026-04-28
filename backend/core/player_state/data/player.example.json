@@ -1,29 +1,44 @@
 {
   "identity": {
-    "player_id": "player_001",
-    "name": "Mira Vale"
+    "player_id": "player_dynamic_001",
+    "name": "Riven Ash"
   },
   "race": "Human",
-  "player_class": "Drifter",
-  "background": "Former courier from a collapsed rail guild.",
+  "player_class": "Wanderer",
+  "background": "A former caravan scout trying to rebuild a life after losing their trade route.",
   "stats": [
     {
       "stat_id": "resolve",
       "name": "Resolve",
-      "value": 5
+      "value": 4
+    },
+    {
+      "stat_id": "agility",
+      "name": "Agility",
+      "value": 3
     }
   ],
   "skills": [
     {
       "skill_id": "negotiation",
       "name": "Negotiation",
+      "level": 1
+    },
+    {
+      "skill_id": "awareness",
+      "name": "Awareness",
       "level": 2
     }
   ],
   "inventory": [
     {
-      "item_id": "rail_map",
-      "name": "Worn Rail Map",
+      "item_id": "old_compass",
+      "name": "Old Compass",
+      "quantity": 1
+    },
+    {
+      "item_id": "travel_cloak",
+      "name": "Travel Cloak",
       "quantity": 1
     }
   ],
@@ -31,13 +46,13 @@
     {
       "currency_id": "coin",
       "name": "Coin",
-      "amount": 18
+      "amount": 7
     }
   ],
   "status_effects": [],
   "current_location": {
-    "region_id": "ironhollow",
-    "detail": "Refinery Square"
+    "region_id": "stonemarket",
+    "detail": "Crowded market crossroads"
   },
   "party_links": []
 }

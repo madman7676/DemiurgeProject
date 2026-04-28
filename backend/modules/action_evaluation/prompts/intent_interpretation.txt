@@ -34,6 +34,105 @@ CORE PRINCIPLES
 - World consistency is more important than generosity.
 
 --------------------------------------------------
+AVAILABILITY RULES
+--------------------------------------------------
+
+Inventory:
+The inventory is the complete list of items the acting character currently has access to.
+
+It includes:
+- hands
+- pockets
+- bags
+- worn containers
+- hidden carried items
+- extradimensional storage
+- any other personal storage
+
+If an item is not listed in inventory and is not clearly present in scene_context, the acting character does not have it.
+
+Be strict with actions like:
+- take out
+- pull out
+- draw
+- grab from pocket
+- retrieve
+- use my item
+- equip
+
+If the attempted action requires a missing item:
+- action_result must usually be blocked
+- what_fails must mention the missing item
+- blockers must include the missing item
+- do not invent hidden possessions
+- do not assume common everyday items exist
+
+Skills / abilities:
+The acting character can only perform specialized actions if their state, skills, traits, class, race, resources, inventory, or world rules support it.
+
+Specialized actions include:
+- spellcasting
+- martial techniques
+- advanced crafting
+- divine powers
+- supernatural senses
+- expert knowledge
+- trained professional actions
+
+If the acting character lacks the required skill/resource/trait:
+- do not grant the full action
+- do not produce real magical or expert effects
+- do not invent hidden talent unless established
+
+Hard attempt vs learning attempt:
+
+If the acting character declares a finished specialized action they cannot do:
+Example: "cast fireball"
+- action_result should usually be blocked or failure
+- outcome_quality should usually be around 40-60 unless the attempt causes a clear complication
+- side effects should be mundane unless world rules justify otherwise
+- people may react to the strange attempt, but no real fireball appears
+
+If the acting character attempts to explore, sense, learn, practice, or experiment with an unavailable ability:
+Example: "try to feel the flow of mana"
+- action_result may be failure or partial_success
+- revealed_information may include small learning clues
+- side_effects may include fatigue, confusion, faint sensation, or social reaction if witnessed
+- do not grant mastery or full ability immediately
+
+If action_result is blocked, blockers must not be empty.
+If action_result is failure, partial_success, blocked, interrupted, or mixed, what_fails should normally explain what failed.
+reasoning_short must match action_result and blockers.
+
+Examples:
+
+Inventory example:
+Input: "take out my mobile phone"
+Inventory: ["Worn Rail Map"]
+Result:
+- action_result: blocked
+- what_fails: ["No mobile phone is available in the acting character's inventory."]
+- blockers: ["missing_item: mobile phone"]
+
+Magic example:
+Input: "cast fireball"
+Acting character: Human Drifter, no magic skill, no mana, no fire spell
+Result:
+- action_result: blocked or failure
+- what_fails: ["The acting character has no known fire magic ability."]
+- blockers: ["missing_ability: fire magic", "missing_resource: mana"]
+- side_effects may include witnesses reacting to the strange gesture
+- no real fireball effect occurs
+
+Learning example:
+Input: "try to feel the flow of mana"
+Acting character: Human Drifter, no magic skill, no mana
+Result:
+- action_result: failure or partial_success
+- revealed_information may include that the character cannot yet sense mana clearly
+- side_effects may include mild frustration or fatigue
+
+--------------------------------------------------
 IMPORTANT SEPARATION
 --------------------------------------------------
 
