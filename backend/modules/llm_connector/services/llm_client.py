@@ -21,7 +21,12 @@ logger = logging.getLogger(__name__)
 class LLMAdapter(Protocol):
     """Small interface used by gameplay services that depend on text generation."""
 
-    def generate_text(self, system_prompt: str, user_prompt: str) -> LLMGenerateResponse:
+    def generate_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        format_json: bool = False,
+    ) -> LLMGenerateResponse:
         """Generate text using the configured model backend."""
 
 
@@ -32,7 +37,12 @@ class OllamaLLMClient:
         self._settings = settings
         self._skip_until = 0.0
 
-    def generate_text(self, system_prompt: str, user_prompt: str) -> LLMGenerateResponse:
+    def generate_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        format_json: bool = False,
+    ) -> LLMGenerateResponse:
         """Send a non-streaming prompt to Ollama and return the text result."""
 
         if self._settings.allow_mock_fallback and time.monotonic() < self._skip_until:
@@ -42,13 +52,13 @@ class OllamaLLMClient:
         logger.info(
             "Calling Ollama model '%s' at %s",
             self._settings.model,
-            self._settings.llm_url,
-        )
+                self._settings.llm_url,
+            )
 
         try:
             response = requests.post(
                 self._settings.llm_url,
-                json=self._build_payload(system_prompt, user_prompt),
+                json=self._build_payload(system_prompt, user_prompt, format_json=format_json),
                 timeout=self._settings.llm_timeout_seconds,
             )
             response.raise_for_status()
@@ -73,15 +83,23 @@ class OllamaLLMClient:
             "used_mock": False,
         }
 
-    def _build_payload(self, system_prompt: str, user_prompt: str) -> dict[str, object]:
+    def _build_payload(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        format_json: bool = False,
+    ) -> dict[str, object]:
         """Build the minimal non-streaming Ollama request body."""
 
-        return {
+        payload: dict[str, object] = {
             "model": self._settings.model,
             "prompt": user_prompt,
             "system": system_prompt,
             "stream": False,
         }
+        if format_json and self._settings.ollama_json_mode:
+            payload["format"] = "json"
+        return payload
 
     def _extract_response_text(self, response_data: object) -> str | None:
         """Extract generated text from the Ollama response payload."""

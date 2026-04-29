@@ -1,0 +1,1 @@
+"""Generic entity resolver module."""

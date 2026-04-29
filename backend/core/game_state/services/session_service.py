@@ -12,6 +12,7 @@ from backend.core.game_state.contracts import (
     DecisionCycle,
     GameSessionState,
     GameTime,
+    ScenePoolAnchor,
     SessionMessage,
     VisibleGameState,
 )
@@ -39,20 +40,35 @@ def _create_initial_time() -> GameTime:
     }
 
 
+def _create_scene_pool_anchor(player_state: dict[str, Any]) -> ScenePoolAnchor:
+    """Anchor the soft scene entity pool to the current visible location."""
+
+    current_location = player_state.get("current_location", {})
+    return {
+        "region_id": str(current_location.get("region_id", "unknown")),
+        "detail": str(current_location.get("detail", "")),
+        "turn": 0,
+    }
+
+
 def create_initial_session_state() -> GameSessionState:
     """Build a single minimal session using documentation example data."""
 
+    player_state = _load_json("player_state/data/player.example.json")
     return {
         "session_id": f"session-{uuid4()}",
         "mode": "exploration",
         "world_rules": _load_json("world_rules/data/world.example.json"),
-        "player_state": _load_json("player_state/data/player.example.json"),
+        "player_state": player_state,
         "npc_states": [_load_json("npc_state/data/npc.example.json")],
         "current_time": _create_initial_time(),
         "discovered_rules": [],
         "last_presented_choices": [],
         "recent_messages": [],
         "decision_history": [],
+        "scene_entity_pool": [],
+        "scene_pool_anchor": _create_scene_pool_anchor(player_state),
+        "interruption_pressure": 0,
         "turn_count": 0,
         "last_evolution_check_turn": 0,
     }
@@ -85,10 +101,14 @@ def append_message(
     session_state: GameSessionState,
     role: SessionMessage["role"],
     text: str,
+    annotations: list[dict[str, Any]] | None = None,
 ) -> None:
     """Append a player or assistant message to the current session."""
 
-    session_state["recent_messages"].append({"role": role, "text": text})
+    message: SessionMessage = {"role": role, "text": text}
+    if annotations:
+        message["annotations"] = deepcopy(annotations)
+    session_state["recent_messages"].append(message)
 
 
 def append_decision_cycle(

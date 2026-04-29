@@ -47,6 +47,7 @@ def process_message_response(
     return {
         "session_id": context.session_store.get_session()["session_id"],
         "route": pipeline_result["route"],
+        "entity_resolution": pipeline_result["entity_resolution"],
         "result": pipeline_result["action_result"],
         "narrative_text": pipeline_result["narrative_text"],
         "visible_state": pipeline_result["visible_state"],

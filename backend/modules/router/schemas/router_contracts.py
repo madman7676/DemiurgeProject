@@ -35,6 +35,13 @@ class RouterAgentInput(TypedDict):
     active_features: list[str]
 
 
+class EntityResolutionHint(TypedDict):
+    """Router signal that canonical entity resolution is probably needed."""
+
+    needed: bool
+    reason: str
+
+
 class RouteDecision(TypedDict):
     """Structured Router Agent output used by the exploration pipeline."""
 
@@ -46,3 +53,4 @@ class RouteDecision(TypedDict):
     requested_agents: list[str]
     narration_notes: list[str]
     routing_reason: str
+    entity_resolution_hint: EntityResolutionHint

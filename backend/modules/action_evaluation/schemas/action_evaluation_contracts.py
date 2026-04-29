@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, TypedDict
 
 from backend.core.world_rules.contracts import DiscoveredRuleCandidate
+from backend.modules.entity_resolver.schemas.entity_resolver_contracts import (
+    EntityResolutionResult,
+)
 
 
 ActionResult = Literal["success", "failure", "partial_success", "blocked", "mixed"]
@@ -64,34 +67,50 @@ class TimeCost(TypedDict):
 
 
 class ActingCharacterInput(TypedDict):
-    """Actor-centric snapshot passed into Judge for one attempted action."""
+    """Compact actor-centric snapshot passed into Judge for one attempted action."""
 
+    id: str
     name: str
-    description: str
-    state: dict[str, Any]
-    capabilities: dict[str, Any]
-    inventory: list[dict[str, Any]]
-    known_facts: list[str]
-    relationships: dict[str, Any]
+    race: str
+    character_class: str
+    condition_summary: str
+    relevant_stats: list[dict[str, Any]]
+    relevant_skills: list[dict[str, Any]]
+    relevant_resources: dict[str, Any]
+    relevant_inventory: list[dict[str, Any]]
+    equipped_items: list[dict[str, Any]]
+
+
+class JudgeSceneContext(TypedDict):
+    """Compact scene facts relevant to resolving one action."""
+
+    location_summary: str
+    environment_summary: str
+    visible_relevant_entities: list[dict[str, Any]]
+    pressure_summary: str
+    recent_relevant_context: list[str]
+
+
+class PrecheckedFacts(TypedDict):
+    """Deterministic facts prepared before Judge runs."""
+
+    blocking_facts: list[str]
+    warnings: list[str]
+    confirmed_facts: list[str]
 
 
 class ActionEvaluationInput(TypedDict):
-    """Structured Judge input used for LLM evaluation."""
+    """Compact Judge input used for focused LLM action resolution."""
 
-    raw_input: str
+    raw_player_input: str
     attempted_action: str
-    acting_character: ActingCharacterInput
-    router_output: dict[str, Any]
+    primary_intent: str
+    action_category: str
     game_mode: str
-    scene_context: dict[str, Any]
-    visible_entities: list[dict[str, Any]]
-    world_rules: dict[str, Any]
-    recent_context: list[dict[str, Any]]
-    raw_player_input: NotRequired[str]
-    expanded_player_intent: NotRequired[str]
-    player_state: NotRequired[dict[str, Any]]
-    player_capabilities: NotRequired[dict[str, Any]]
-    inventory: NotRequired[list[dict[str, Any]]]
+    acting_character: ActingCharacterInput
+    scene_context: JudgeSceneContext
+    entity_resolution: EntityResolutionResult
+    prechecked_facts: PrecheckedFacts
 
 
 class ActionProcessingContract(TypedDict):

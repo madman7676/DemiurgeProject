@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { renderAnnotatedText } from "../../utils/renderAnnotatedText";
 
 // Minimal chat surface for exploration-mode requests and responses.
 export function ChatUI({ messages, onSendMessage, isSending, error }) {
@@ -33,7 +34,11 @@ export function ChatUI({ messages, onSendMessage, isSending, error }) {
               className={`message-bubble message-bubble-${message.role}`}
             >
               <strong>{message.role === "player" ? "You" : "Narrator"}</strong>
-              <p>{message.text}</p>
+              <p>
+                {message.role === "player"
+                  ? renderAnnotatedText(message.text, message.annotations || [])
+                  : message.text}
+              </p>
             </article>
           ))
         )}

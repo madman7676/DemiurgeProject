@@ -28,6 +28,7 @@ class PlayerSkill(TypedDict):
     skill_id: str
     name: str
     level: int | float
+    aliases: NotRequired[list[str]]
     tags: NotRequired[list[str]]
 
 
@@ -37,6 +38,7 @@ class InventoryItem(TypedDict):
     item_id: str
     name: str
     quantity: int
+    aliases: NotRequired[list[str]]
     tags: NotRequired[list[str]]
 
 
@@ -46,6 +48,7 @@ class CurrencyBalance(TypedDict):
     currency_id: str
     name: str
     amount: int | float
+    aliases: NotRequired[list[str]]
 
 
 class StatusEffect(TypedDict):
@@ -84,6 +87,8 @@ class PlayerStateContract(TypedDict):
     stats: list[PlayerStat]
     skills: list[PlayerSkill]
     inventory: list[InventoryItem]
+    equipped_items: NotRequired[list[InventoryItem]]
+    held_items: NotRequired[list[InventoryItem]]
     currencies: list[CurrencyBalance]
     status_effects: list[StatusEffect]
     current_location: LocationReference

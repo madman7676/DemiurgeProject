@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from backend.core.npc_state.contracts import NPCStateContract
 from backend.core.player_state.contracts import PlayerStateContract
@@ -32,6 +32,26 @@ class SessionMessage(TypedDict):
 
     role: Literal["player", "assistant"]
     text: str
+    annotations: NotRequired[list[dict[str, Any]]]
+
+
+class SceneEntityPoolEntry(TypedDict):
+    """Soft scene-memory entity available for local resolution only."""
+
+    entity_type: Literal["scene_entity", "interactable"]
+    entity_id: str
+    name: str
+    aliases: list[str]
+    source: str
+    raw: dict[str, Any]
+
+
+class ScenePoolAnchor(TypedDict):
+    """Tracks when the soft scene pool should be refreshed."""
+
+    region_id: str
+    detail: str
+    turn: int
 
 
 class DecisionEvent(TypedDict):
@@ -72,5 +92,8 @@ class GameSessionState(TypedDict):
     last_presented_choices: list[QuickChoice]
     recent_messages: list[SessionMessage]
     decision_history: list[DecisionCycle]
+    scene_entity_pool: list[SceneEntityPoolEntry]
+    scene_pool_anchor: ScenePoolAnchor
+    interruption_pressure: int
     turn_count: int
     last_evolution_check_turn: int

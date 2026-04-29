@@ -34,6 +34,7 @@ class RouterService:
         llm_response = self._llm_adapter.generate_text(
             system_prompt=self._system_prompt,
             user_prompt=user_prompt,
+            format_json=True,
         )
 
         if llm_response["text"].strip():
@@ -101,6 +102,8 @@ class RouterService:
                     "Do not use markdown or code fences.",
                     "Do not add explanations outside JSON.",
                     "Keep raw_player_input intent primary and context secondary.",
+                    "Include entity_resolution_hint.needed=true only when the action likely depends on a referenced concrete entity, tool, target, actor, skill, item, currency, or interactable.",
+                    "Do not include canonical entity ids or resolved entity data.",
                 ],
             ),
         ]
@@ -163,6 +166,10 @@ class RouterService:
         if not expanded_player_intent:
             raise ValueError("expanded_player_intent is required")
 
+        entity_resolution_hint = self._coerce_entity_resolution_hint(
+            parsed.get("entity_resolution_hint", {}),
+        )
+
         return {
             "action_category": action_category,
             "expanded_player_intent": expanded_player_intent,
@@ -172,7 +179,19 @@ class RouterService:
             "requested_agents": requested_agents,
             "narration_notes": self._safe_string_list(parsed.get("narration_notes", [])),
             "routing_reason": str(parsed.get("routing_reason", "Router Agent selected this route.")).strip(),
+            "entity_resolution_hint": entity_resolution_hint,
         }
+
+    def _coerce_entity_resolution_hint(self, value: object) -> dict[str, object]:
+        """Normalize the optional Router entity-resolution hint."""
+
+        if not isinstance(value, dict):
+            return {"needed": False, "reason": ""}
+        needed = bool(value.get("needed", False))
+        reason = str(value.get("reason", "")).strip()
+        if not needed:
+            reason = reason or "No concrete referenced entity appears required."
+        return {"needed": needed, "reason": reason[:180]}
 
     def _safe_string_list(self, value: object) -> list[str]:
         """Normalize a possible string list into clean text items."""
@@ -194,7 +213,8 @@ class RouterService:
                 "  possible_targets=%s\n"
                 "  requested_agents=%s\n"
                 "  narration_notes=%s\n"
-                "  routing_reason=%s"
+                "  routing_reason=%s\n"
+                "  entity_resolution_hint=%s"
             ),
             prefix,
             route_decision["action_category"],
@@ -205,6 +225,7 @@ class RouterService:
             route_decision["requested_agents"],
             route_decision["narration_notes"],
             route_decision["routing_reason"],
+            route_decision["entity_resolution_hint"],
         )
 
     def _fallback_route(self, router_input: RouterAgentInput) -> RouteDecision:
@@ -262,6 +283,32 @@ class RouterService:
             "requested_agents": requested_agents,
             "narration_notes": [],
             "routing_reason": routing_reason,
+            "entity_resolution_hint": self._fallback_entity_resolution_hint(
+                action_category=action_category,
+                possible_targets=possible_targets,
+            ),
+        }
+
+    def _fallback_entity_resolution_hint(
+        self,
+        action_category: str,
+        possible_targets: list[str],
+    ) -> dict[str, object]:
+        """Conservatively request resolution only for concrete fallback targets."""
+
+        if possible_targets:
+            return {
+                "needed": True,
+                "reason": "Fallback detected a concrete named visible target in the input.",
+            }
+        if action_category == "combat_attempt":
+            return {
+                "needed": True,
+                "reason": "Combat attempts usually depend on a concrete target.",
+            }
+        return {
+            "needed": False,
+            "reason": "Fallback did not identify a concrete referenced entity.",
         }
 
     def _expand_quick_choice(self, router_input: RouterAgentInput) -> str:

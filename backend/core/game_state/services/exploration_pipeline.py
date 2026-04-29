@@ -19,6 +19,12 @@ from backend.modules.action_evaluation.schemas.action_evaluation_contracts impor
 from backend.modules.action_evaluation.services.action_evaluation_service import (
     ActionEvaluationService,
 )
+from backend.modules.entity_resolver.schemas.entity_resolver_contracts import (
+    EntityResolutionResult,
+)
+from backend.modules.entity_resolver.services.entity_resolver_service import (
+    EntityResolverService,
+)
 from backend.modules.feature_modules.services.feature_registry import build_available_modules
 from backend.modules.narrator.services.narrator_service import NarratorService
 from backend.modules.router.schemas.router_contracts import (
@@ -38,6 +44,7 @@ class ExplorationPipelineResult(TypedDict):
     """Response payload produced by the exploration pipeline."""
 
     route: RouteDecision
+    entity_resolution: EntityResolutionResult
     action_result: ActionProcessingContract
     narrative_text: str
     visible_state: dict
@@ -54,11 +61,13 @@ class ExplorationPipeline:
         self,
         session_store: InMemorySessionStore,
         router_service: RouterService,
+        entity_resolver_service: EntityResolverService,
         action_evaluation_service: ActionEvaluationService,
         narrator_service: NarratorService,
     ) -> None:
         self._session_store = session_store
         self._router_service = router_service
+        self._entity_resolver_service = entity_resolver_service
         self._action_evaluation_service = action_evaluation_service
         self._narrator_service = narrator_service
 
@@ -118,12 +127,34 @@ class ExplorationPipeline:
                     "requested_agents": route["requested_agents"],
                     "narration_notes": route["narration_notes"],
                     "routing_reason": route["routing_reason"],
+                    "entity_resolution_hint": route["entity_resolution_hint"],
+                },
+            }
+        )
+        entity_resolution = self._entity_resolver_service.resolve_entities(
+            raw_player_input=raw_player_input,
+            route_decision=route,
+            session_state=session_state,
+        )
+        decision_events.append(
+            {
+                "source": "entity_resolver",
+                "message": "Resolved canonical entity references from raw input.",
+                "details": {
+                    "execution_status": entity_resolution["execution_status"],
+                    "resolver_status": entity_resolution["resolver_status"],
+                    "resolved_entities": entity_resolution["resolved_entities"],
+                    "ambiguous_mentions": entity_resolution["ambiguous_mentions"],
+                    "unresolved_mentions": entity_resolution["unresolved_mentions"],
+                    "annotations": entity_resolution["annotations"],
+                    "debug": entity_resolution["debug"],
                 },
             }
         )
         action_result = self._action_evaluation_service.evaluate_action(
             raw_player_input=raw_player_input,
             route_decision=route,
+            entity_resolution=entity_resolution,
             session_state=session_state,
         )
         decision_events.append(
@@ -142,6 +173,13 @@ class ExplorationPipeline:
                 },
             }
         )
+        if "interrupted_before_execution" in action_result["risk_flags"]:
+            session_state["interruption_pressure"] += 1
+        else:
+            session_state["interruption_pressure"] = max(
+                0,
+                session_state["interruption_pressure"] - 1,
+            )
         decision_events.append(
             {
                 "source": "time_cost",
@@ -235,8 +273,19 @@ class ExplorationPipeline:
             visible_state=visible_state,
             route_decision=route,
         )
+        self._entity_resolver_service.refresh_scene_entity_pool(
+            session_state=session_state,
+            narrative_text=narrative_text,
+            resolved_entities=entity_resolution["resolved_entities"],
+            time_advanced=int(action_result["time_cost"]["amount"]),
+        )
 
-        append_message(session_state, "player", raw_player_input)
+        append_message(
+            session_state,
+            "player",
+            raw_player_input,
+            annotations=entity_resolution["annotations"],
+        )
         append_message(session_state, "assistant", narrative_text)
         decision_cycle: DecisionCycle = {
             "turn": cycle_turn,
@@ -247,6 +296,7 @@ class ExplorationPipeline:
 
         return {
             "route": route,
+            "entity_resolution": entity_resolution,
             "action_result": action_result,
             "narrative_text": narrative_text,
             "visible_state": visible_state,

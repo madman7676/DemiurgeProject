@@ -23,6 +23,10 @@ from backend.core.game_state.services.session_service import InMemorySessionStor
 from backend.modules.action_evaluation.services.action_evaluation_service import (
     ActionEvaluationService,
 )
+from backend.modules.entity_resolver.services.entity_resolver_service import (
+    EntityResolverService,
+    LLMSemanticEntityMatcher,
+)
 from backend.modules.llm_connector.services.llm_client import OllamaLLMClient
 from backend.modules.narrator.services.narrator_service import NarratorService
 from backend.modules.router.services.router_service import RouterService
@@ -43,6 +47,9 @@ def create_route_context(settings: Settings) -> RouteContext:
     exploration_pipeline = ExplorationPipeline(
         session_store=session_store,
         router_service=RouterService(llm_adapter=llm_adapter),
+        entity_resolver_service=EntityResolverService(
+            semantic_matcher=LLMSemanticEntityMatcher(llm_adapter),
+        ),
         action_evaluation_service=ActionEvaluationService(llm_adapter=llm_adapter),
         narrator_service=NarratorService(llm_adapter=llm_adapter),
     )

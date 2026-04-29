@@ -16,6 +16,7 @@ class Settings:
     port: int
     llm_timeout_seconds: int
     allow_mock_fallback: bool
+    ollama_json_mode: bool
 
 
 def load_settings() -> Settings:
@@ -26,6 +27,7 @@ def load_settings() -> Settings:
         llm_url=os.getenv("LLM_URL", "http://localhost:11434/api/generate"),
         host=os.getenv("BACKEND_HOST", "127.0.0.1"),
         port=int(os.getenv("BACKEND_PORT", "8000")),
-        llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "120")),
+        llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "240")),
         allow_mock_fallback=os.getenv("ALLOW_MOCK_LLM", "true").lower() != "false",
+        ollama_json_mode=os.getenv("OLLAMA_JSON_MODE", "true").lower() != "false",
     )
