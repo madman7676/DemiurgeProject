@@ -320,6 +320,7 @@ class EntityResolverService:
         candidates.extend(self._build_currency_candidates(player_state.get("currencies", [])))
         candidates.extend(self._build_actor_candidates(session_state))
         candidates.extend(self._build_scene_pool_candidates(session_state.get("scene_entity_pool", [])))
+        candidates.extend(self._build_available_scene_entity_candidates(session_state))
         candidates.extend(self._build_explicit_contextual_candidates(session_state))
         return self._dedupe_candidates(candidates)
 
@@ -341,6 +342,8 @@ class EntityResolverService:
         if self._build_actor_candidates(session_state):
             sources.add("actors")
         if session_state.get("scene_entity_pool"):
+            sources.add("scene_pool")
+        if session_state.get("available_scene_entities"):
             sources.add("scene_pool")
         if self._build_explicit_contextual_candidates(session_state):
             sources.add("contextual")
@@ -444,6 +447,27 @@ class EntityResolverService:
                     "source": "contextual",
                     "confidence_base": "soft",
                     "raw": entry.get("raw", entry),
+                }
+            )
+        return candidates
+
+    def _build_available_scene_entity_candidates(self, session_state: GameSessionState) -> list[ResolverCandidate]:
+        """Expose narrator-marked available entities as soft scene candidates."""
+
+        candidates: list[ResolverCandidate] = []
+        for entry in session_state.get("available_scene_entities", []):
+            name = str(entry.get("name", "")).strip()
+            if not name:
+                continue
+            candidates.append(
+                {
+                    "entity_type": "scene_entity",
+                    "entity_id": f"scene:candidate:{self._slugify(name)}",
+                    "name": name,
+                    "aliases": self._build_aliases(name, []),
+                    "source": "scene_pool",
+                    "confidence_base": "soft",
+                    "raw": entry,
                 }
             )
         return candidates

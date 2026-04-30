@@ -5,6 +5,8 @@ Other backend modules should call into this module instead of talking to the mod
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+import json
 import logging
 import time
 from typing import Protocol
@@ -28,6 +30,14 @@ class LLMAdapter(Protocol):
         format_json: bool = False,
     ) -> LLMGenerateResponse:
         """Generate text using the configured model backend."""
+
+    def stream_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        format_json: bool = False,
+    ) -> Iterator[str]:
+        """Stream text chunks for callers that explicitly support streaming."""
 
 
 class OllamaLLMClient:
@@ -88,18 +98,62 @@ class OllamaLLMClient:
         system_prompt: str,
         user_prompt: str,
         format_json: bool = False,
+        stream: bool = False,
     ) -> dict[str, object]:
-        """Build the minimal non-streaming Ollama request body."""
+        """Build the minimal Ollama request body."""
 
         payload: dict[str, object] = {
             "model": self._settings.model,
             "prompt": user_prompt,
             "system": system_prompt,
-            "stream": False,
+            "stream": stream,
         }
         if format_json and self._settings.ollama_json_mode:
             payload["format"] = "json"
         return payload
+
+    def stream_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        format_json: bool = False,
+    ) -> Iterator[str]:
+        """Stream an Ollama response chunk by chunk."""
+
+        if self._settings.allow_mock_fallback and time.monotonic() < self._skip_until:
+            logger.info("Skipping Ollama stream because the adapter is in fallback cooldown.")
+            return
+
+        logger.info("Streaming Ollama model '%s' at %s", self._settings.model, self._settings.llm_url)
+        try:
+            with requests.post(
+                self._settings.llm_url,
+                json=self._build_payload(
+                    system_prompt,
+                    user_prompt,
+                    format_json=format_json,
+                    stream=True,
+                ),
+                timeout=self._settings.llm_timeout_seconds,
+                stream=True,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    try:
+                        response_data = json.loads(line)
+                    except ValueError:
+                        logger.warning("Could not parse Ollama stream line: %s", line)
+                        continue
+                    chunk = response_data.get("response", "")
+                    if isinstance(chunk, str) and chunk:
+                        yield chunk
+                    if response_data.get("done"):
+                        break
+        except requests.RequestException as exc:
+            self._skip_until = time.monotonic() + 10
+            logger.warning("Ollama stream failed: %s", exc)
 
     def _extract_response_text(self, response_data: object) -> str | None:
         """Extract generated text from the Ollama response payload."""

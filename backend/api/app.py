@@ -5,11 +5,14 @@ Keep transport concerns here so gameplay modules remain framework-agnostic.
 
 from __future__ import annotations
 
+import json
+from queue import Queue
+from threading import Thread
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from backend.api.routes import (
@@ -102,4 +105,69 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request_payload["message"] = raw_message
         return process_message_response(request_payload, app.state.route_context)
 
+    @app.post("/api/message/stream")
+    def post_message_stream(payload: MessageRequest) -> StreamingResponse | JSONResponse:
+        """Process a message and stream narrator chunks as NDJSON."""
+
+        request_payload = payload.model_dump(exclude_none=True)
+        raw_message = request_payload["message"].strip()
+        if not raw_message:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "The 'message' field is required."},
+            )
+        request_payload["message"] = raw_message
+        return StreamingResponse(
+            _stream_message_response(request_payload, app.state.route_context),
+            media_type="application/x-ndjson",
+        )
+
     return app
+
+
+def _stream_message_response(payload: dict[str, Any], context: RouteContext):
+    """Run the sync pipeline in a worker while yielding narrator chunks."""
+
+    events: Queue[str | None] = Queue()
+
+    def emit(event: dict[str, Any]) -> None:
+        events.put(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def run_pipeline() -> None:
+        try:
+            if "session_state" in payload and isinstance(payload["session_state"], dict):
+                context.session_store.replace_session(payload["session_state"])
+            pipeline_result = context.exploration_pipeline.process_player_message(
+                str(payload.get("message", "")),
+                on_narration_chunk=lambda chunk: emit({"type": "narration_delta", "text": chunk}),
+            )
+            emit(
+                {
+                    "type": "final",
+                    "data": {
+                        "session_id": context.session_store.get_session()["session_id"],
+                        "output_language": context.session_store.get_session().get("output_language", ""),
+                        "route": pipeline_result["route"],
+                        "entity_resolution": pipeline_result["entity_resolution"],
+                        "result": pipeline_result["action_result"],
+                        "narrative_text": pipeline_result["narrative_text"],
+                        "visible_state": pipeline_result["visible_state"],
+                        "evolution_check": pipeline_result["evolution_check"],
+                        "recent_messages": pipeline_result["recent_messages"],
+                        "decision_cycle": pipeline_result["decision_cycle"],
+                        "decision_history": pipeline_result["decision_history"],
+                    },
+                }
+            )
+        except Exception as exc:  # pragma: no cover - defensive transport guard
+            emit({"type": "error", "error": str(exc)})
+        finally:
+            events.put(None)
+
+    Thread(target=run_pipeline, daemon=True).start()
+
+    while True:
+        event = events.get()
+        if event is None:
+            break
+        yield event

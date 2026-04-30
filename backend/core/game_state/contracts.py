@@ -54,6 +54,14 @@ class ScenePoolAnchor(TypedDict):
     turn: int
 
 
+class AvailableSceneEntityCandidate(TypedDict):
+    """Temporary v1 scene entity candidate emitted by narrator markers."""
+
+    name: str
+    source: str
+    status: Literal["candidate"]
+
+
 class DecisionEvent(TypedDict):
     """Short developer-facing description of a gameplay pipeline decision."""
 
@@ -93,6 +101,8 @@ class GameSessionState(TypedDict):
     recent_messages: list[SessionMessage]
     decision_history: list[DecisionCycle]
     scene_entity_pool: list[SceneEntityPoolEntry]
+    available_scene_entities: list[AvailableSceneEntityCandidate]
+    output_language: NotRequired[str]
     scene_pool_anchor: ScenePoolAnchor
     interruption_pressure: int
     turn_count: int

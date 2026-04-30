@@ -26,6 +26,7 @@ def get_session_response(context: RouteContext) -> dict[str, Any]:
     session_state = context.session_store.get_session()
     return {
         "session_id": session_state["session_id"],
+        "output_language": session_state.get("output_language", ""),
         "visible_state": build_visible_state(session_state),
         "recent_messages": list(session_state["recent_messages"]),
         "decision_history": list(session_state["decision_history"]),
@@ -46,6 +47,7 @@ def process_message_response(
     pipeline_result = context.exploration_pipeline.process_player_message(raw_message)
     return {
         "session_id": context.session_store.get_session()["session_id"],
+        "output_language": context.session_store.get_session().get("output_language", ""),
         "route": pipeline_result["route"],
         "entity_resolution": pipeline_result["entity_resolution"],
         "result": pipeline_result["action_result"],

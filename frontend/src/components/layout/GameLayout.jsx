@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchSession, sendPlayerMessage } from "../../api/gameApi";
+import { fetchSession, sendPlayerMessageStream } from "../../api/gameApi";
 import { ChatUI } from "../chat/ChatUI";
 import { DebugPanel } from "../debug/DebugPanel";
 import { InventoryPanel } from "../state_panels/InventoryPanel";
@@ -39,13 +39,31 @@ export function GameLayout() {
     ]);
 
     try {
-      const response = await sendPlayerMessage(message);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        { role: "assistant", text: "" },
+      ]);
+      const response = await sendPlayerMessageStream(message, {
+        onNarrationDelta: (chunk) => {
+          setMessages((currentMessages) => {
+            const updatedMessages = [...currentMessages];
+            const lastIndex = updatedMessages.length - 1;
+            if (lastIndex >= 0 && updatedMessages[lastIndex].role === "assistant") {
+              updatedMessages[lastIndex] = {
+                ...updatedMessages[lastIndex],
+                text: `${updatedMessages[lastIndex].text}${chunk}`,
+              };
+            }
+            return updatedMessages;
+          });
+        },
+      });
       setVisibleState(response.visible_state);
       setMessages(response.recent_messages || []);
       setDecisionHistory(response.decision_history || []);
     } catch (sendError) {
       setError(sendError.message);
-      setMessages((currentMessages) => currentMessages.slice(0, -1));
+      setMessages((currentMessages) => currentMessages.slice(0, -2));
     } finally {
       setIsSending(false);
     }

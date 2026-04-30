@@ -67,6 +67,8 @@ def create_initial_session_state() -> GameSessionState:
         "recent_messages": [],
         "decision_history": [],
         "scene_entity_pool": [],
+        "available_scene_entities": [],
+        "output_language": "",
         "scene_pool_anchor": _create_scene_pool_anchor(player_state),
         "interruption_pressure": 0,
         "turn_count": 0,

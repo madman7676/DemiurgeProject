@@ -26,7 +26,12 @@ from backend.modules.entity_resolver.services.entity_resolver_service import (
     EntityResolverService,
 )
 from backend.modules.feature_modules.services.feature_registry import build_available_modules
-from backend.modules.narrator.services.narrator_service import NarratorService
+from backend.modules.narrator.services.narrator_service import (
+    NarratorService,
+    detect_output_language,
+    extract_available_entities,
+    store_scene_candidates,
+)
 from backend.modules.router.schemas.router_contracts import (
     RouteDecision,
     RouterAgentInput,
@@ -71,10 +76,16 @@ class ExplorationPipeline:
         self._action_evaluation_service = action_evaluation_service
         self._narrator_service = narrator_service
 
-    def process_player_message(self, raw_player_input: str) -> ExplorationPipelineResult:
+    def process_player_message(
+        self,
+        raw_player_input: str,
+        on_narration_chunk=None,
+    ) -> ExplorationPipelineResult:
         """Process one exploration action from input to visible frontend result."""
 
         session_state = self._session_store.get_session()
+        if not session_state.get("output_language"):
+            session_state["output_language"] = detect_output_language(raw_player_input, fallback="uk")
         cycle_turn = session_state["turn_count"] + 1
         decision_events: list[DecisionEvent] = []
 
@@ -272,13 +283,25 @@ class ExplorationPipeline:
             action_result=action_result,
             visible_state=visible_state,
             route_decision=route,
+            output_language=session_state.get("output_language", "uk"),
+            on_token=on_narration_chunk,
         )
+        scene_candidates = extract_available_entities(narrative_text)
+        store_scene_candidates(session_state, scene_candidates)
         self._entity_resolver_service.refresh_scene_entity_pool(
             session_state=session_state,
             narrative_text=narrative_text,
             resolved_entities=entity_resolution["resolved_entities"],
             time_advanced=int(action_result["time_cost"]["amount"]),
         )
+        if scene_candidates:
+            decision_events.append(
+                {
+                    "source": "narrator",
+                    "message": "Stored narrator-marked available scene entity candidates.",
+                    "details": {"scene_entity_candidates": scene_candidates},
+                }
+            )
 
         append_message(
             session_state,
