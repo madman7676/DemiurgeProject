@@ -105,8 +105,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request_payload["message"] = raw_message
         return process_message_response(request_payload, app.state.route_context)
 
-    @app.post("/api/message/stream")
-    def post_message_stream(payload: MessageRequest) -> StreamingResponse | JSONResponse:
+    @app.post("/api/message/stream", response_model=None)
+    def post_message_stream(payload: MessageRequest):
         """Process a message and stream narrator chunks as NDJSON."""
 
         request_payload = payload.model_dump(exclude_none=True)
