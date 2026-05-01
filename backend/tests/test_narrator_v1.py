@@ -143,6 +143,24 @@ class NarratorV1Tests(unittest.TestCase):
             [{"name": "криниця", "source": "narrator", "status": "candidate"}],
         )
 
+    def test_pipeline_emits_current_step_statuses(self) -> None:
+        session_store = InMemorySessionStore()
+        pipeline = ExplorationPipeline(
+            session_store=session_store,
+            router_service=_RouterStub(),
+            entity_resolver_service=_ResolverStub(),
+            action_evaluation_service=_ActionStub(),
+            narrator_service=_NarratorStub(),
+        )
+        statuses: list[str] = []
+
+        pipeline.process_player_message("оглянутись", on_status=statuses.append)
+
+        self.assertEqual(
+            statuses,
+            ["router", "judge", "time", "consequence", "narrator"],
+        )
+
 
 class _RouterStub:
     def route_message(self, router_input: dict) -> dict:

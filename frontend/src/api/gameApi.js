@@ -14,7 +14,10 @@ export async function sendPlayerMessage(message) {
   return parseJsonResponse(response);
 }
 
-export async function sendPlayerMessageStream(message, { onNarrationDelta } = {}) {
+export async function sendPlayerMessageStream(
+  message,
+  { onNarrationDelta, onStatus } = {},
+) {
   const response = await fetch("/api/message/stream", {
     method: "POST",
     headers: {
@@ -47,8 +50,12 @@ export async function sendPlayerMessageStream(message, { onNarrationDelta } = {}
         continue;
       }
       const event = JSON.parse(line);
-      if (event.type === "narration_delta") {
+      if (event.type === "status") {
+        onStatus?.(event.step || "");
+      } else if (event.type === "narration_delta") {
         onNarrationDelta?.(event.text || "");
+      } else if (event.type === "text") {
+        onNarrationDelta?.(event.content || "");
       } else if (event.type === "final") {
         finalData = event.data;
       } else if (event.type === "error") {
@@ -59,8 +66,16 @@ export async function sendPlayerMessageStream(message, { onNarrationDelta } = {}
 
   if (buffer.trim()) {
     const event = JSON.parse(buffer);
-    if (event.type === "final") {
+    if (event.type === "status") {
+      onStatus?.(event.step || "");
+    } else if (event.type === "narration_delta") {
+      onNarrationDelta?.(event.text || "");
+    } else if (event.type === "text") {
+      onNarrationDelta?.(event.content || "");
+    } else if (event.type === "final") {
       finalData = event.data;
+    } else if (event.type === "error") {
+      throw new Error(event.error || "Streaming request failed.");
     }
   }
 

@@ -68,6 +68,35 @@ body {
   background: #f7f4ea;
 }
 
+.pipeline-status {
+  align-items: center;
+  color: #52606d;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.pipeline-loader {
+  animation: pipeline-pulse 0.85s ease-in-out infinite;
+  background: #52606d;
+  border-radius: 999px;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+
+@keyframes pipeline-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .chat-subtitle,
 .empty-state,
 .panel-note {

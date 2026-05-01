@@ -140,6 +140,7 @@ def _stream_message_response(payload: dict[str, Any], context: RouteContext):
             pipeline_result = context.exploration_pipeline.process_player_message(
                 str(payload.get("message", "")),
                 on_narration_chunk=lambda chunk: emit({"type": "narration_delta", "text": chunk}),
+                on_status=lambda step: emit({"type": "status", "step": step}),
             )
             emit(
                 {

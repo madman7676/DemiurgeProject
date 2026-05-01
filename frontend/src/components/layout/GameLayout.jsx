@@ -13,6 +13,7 @@ export function GameLayout() {
   const [messages, setMessages] = useState([]);
   const [decisionHistory, setDecisionHistory] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [currentPipelineStep, setCurrentPipelineStep] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export function GameLayout() {
   async function handleSendMessage(message) {
     setError("");
     setIsSending(true);
+    setCurrentPipelineStep("router");
     setMessages((currentMessages) => [
       ...currentMessages,
       { role: "player", text: message },
@@ -44,7 +46,11 @@ export function GameLayout() {
         { role: "assistant", text: "" },
       ]);
       const response = await sendPlayerMessageStream(message, {
+        onStatus: (step) => {
+          setCurrentPipelineStep(step);
+        },
         onNarrationDelta: (chunk) => {
+          setCurrentPipelineStep("");
           setMessages((currentMessages) => {
             const updatedMessages = [...currentMessages];
             const lastIndex = updatedMessages.length - 1;
@@ -66,6 +72,7 @@ export function GameLayout() {
       setMessages((currentMessages) => currentMessages.slice(0, -2));
     } finally {
       setIsSending(false);
+      setCurrentPipelineStep("");
     }
   }
 
@@ -76,6 +83,7 @@ export function GameLayout() {
           messages={messages}
           onSendMessage={handleSendMessage}
           isSending={isSending}
+          currentPipelineStep={currentPipelineStep}
           error={error}
         />
       </section>

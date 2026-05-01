@@ -1,8 +1,23 @@
 import { useState } from "react";
 import { renderAnnotatedText } from "../../utils/renderAnnotatedText";
+import { renderNarrationWithEntities } from "../../utils/renderNarrationWithEntities";
+
+const PIPELINE_STATUS_LABELS = {
+  router: "🧭 Роутер визначає намір...",
+  judge: "⚖️ Суддя оцінює дію...",
+  time: "⏳ Час рухається...",
+  consequence: "🔄 Світ реагує...",
+  narrator: "✍️ Формується відповідь...",
+};
 
 // Minimal chat surface for exploration-mode requests and responses.
-export function ChatUI({ messages, onSendMessage, isSending, error }) {
+export function ChatUI({
+  messages,
+  onSendMessage,
+  isSending,
+  currentPipelineStep,
+  error,
+}) {
   const [inputValue, setInputValue] = useState("");
 
   async function handleSubmit(event) {
@@ -33,12 +48,16 @@ export function ChatUI({ messages, onSendMessage, isSending, error }) {
               key={`${message.role}-${index}`}
               className={`message-bubble message-bubble-${message.role}`}
             >
-              <strong>{message.role === "player" ? "You" : "Narrator"}</strong>
-              <p>
-                {message.role === "player"
-                  ? renderAnnotatedText(message.text, message.annotations || [])
-                  : message.text}
-              </p>
+              <strong>{message.role === "player" ? "You" : ""}</strong>
+              {renderMessageBody({
+                message,
+                isPendingAssistant:
+                  isSending &&
+                  index === messages.length - 1 &&
+                  message.role === "assistant" &&
+                  !message.text,
+                currentPipelineStep,
+              })}
             </article>
           ))
         )}
@@ -59,4 +78,22 @@ export function ChatUI({ messages, onSendMessage, isSending, error }) {
       </form>
     </div>
   );
+}
+
+function renderMessageBody({ message, isPendingAssistant, currentPipelineStep }) {
+  if (message.role === "player") {
+    return <p>{renderAnnotatedText(message.text, message.annotations || [])}</p>;
+  }
+
+  if (isPendingAssistant) {
+    const statusText = PIPELINE_STATUS_LABELS[currentPipelineStep] || PIPELINE_STATUS_LABELS.narrator;
+    return (
+      <p className="pipeline-status">
+        <span className="pipeline-loader" aria-hidden="true" />
+        <span>{statusText}</span>
+      </p>
+    );
+  }
+
+  return <p>{renderNarrationWithEntities(message.text)}</p>;
 }

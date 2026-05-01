@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TypedDict
 
 from backend.core.game_state.contracts import DecisionCycle, DecisionEvent
@@ -80,8 +81,13 @@ class ExplorationPipeline:
         self,
         raw_player_input: str,
         on_narration_chunk=None,
+        on_status: Callable[[str], None] | None = None,
     ) -> ExplorationPipelineResult:
         """Process one exploration action from input to visible frontend result."""
+
+        def emit_status(step: str) -> None:
+            if on_status:
+                on_status(step)
 
         session_state = self._session_store.get_session()
         if not session_state.get("output_language"):
@@ -123,6 +129,7 @@ class ExplorationPipeline:
             "active_features": active_features,
         }
 
+        emit_status("router")
         route = self._router_service.route_message(router_input)
         decision_events.append(
             {
@@ -142,6 +149,7 @@ class ExplorationPipeline:
                 },
             }
         )
+        # Entity resolution is intentionally quiet in the player UI for now; debug panel still captures details.
         entity_resolution = self._entity_resolver_service.resolve_entities(
             raw_player_input=raw_player_input,
             route_decision=route,
@@ -162,6 +170,7 @@ class ExplorationPipeline:
                 },
             }
         )
+        emit_status("judge")
         action_result = self._action_evaluation_service.evaluate_action(
             raw_player_input=raw_player_input,
             route_decision=route,
@@ -184,6 +193,7 @@ class ExplorationPipeline:
                 },
             }
         )
+        emit_status("time")
         if "interrupted_before_execution" in action_result["risk_flags"]:
             session_state["interruption_pressure"] += 1
         else:
@@ -204,6 +214,7 @@ class ExplorationPipeline:
                 },
             }
         )
+        emit_status("consequence")
         action_result = apply_consequence_layer(
             session_state=session_state,
             action_result=action_result,
@@ -267,6 +278,7 @@ class ExplorationPipeline:
                 },
             }
         )
+        emit_status("narrator")
         visible_state = build_visible_state(session_state)
         decision_events.append(
             {
