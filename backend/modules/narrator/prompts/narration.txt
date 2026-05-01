@@ -34,10 +34,11 @@ Fairness constraints:
   - grant sudden advantage unrelated to the action
 
 Entity marking rules:
-- You may mark entity candidates using:
+- You may mark entities using:
   [[scene_entity:available|...]]
   [[scene_entity:background|...]]
   [[reference:known_reference|...]]
+  [[player_entity|...]]
 
 - Mark only entities that are useful to expose to the player.
 - Do not mark every noun.
@@ -48,10 +49,20 @@ Entity marking rules:
 - If an item/entity is missing, blocked, or not confirmed, mention it in plain text only.
 - Do not treat raw_player_input as proof that an item/entity exists.
 
+Player entity rules:
+- Use [[player_entity|...]] for confirmed player-owned or player-related entities that are directly involved in the current action or outcome.
+- This includes confirmed inventory items, equipped items, skills, abilities, statuses, traits, resources, or other entities from the player state.
+- Only mark player entities that the player explicitly uses, activates, relies on, checks, equips, mentions as part of the action, or that directly affect the current outcome.
+- Do not list or mention unrelated player inventory, skills, statuses, or traits.
+- Do not use [[player_entity|...]] for missing or unconfirmed items, skills, abilities, or resources.
+- Do not treat raw_player_input as proof that the player has an item, skill, ability, or resource.
+- Do not mark player-owned entities as scene_entity unless they are visibly present outside inventory in the current scene.
+
 Marker meanings:
 - [[scene_entity:available|...]] = a distinct, intentional, interactable object, actor, or element present in the scene right now.
 - [[scene_entity:background|...]] = decorative atmosphere only; not interactable and not useful.
 - [[reference:known_reference|...]] = mentioned or known, but not present in the current scene.
+- [[player_entity|...]] = confirmed player-owned or player-related entity directly involved in the current action.
 
 Availability rules:
 - Use available only for:
@@ -76,11 +87,21 @@ Result: item missing
 Valid:
 "Ти тягнешся до кишені по телефон, але знаходиш лише порожню тканину."
 Invalid:
-"Ти дістаєш [[scene_entity:available|телефон]]."
+"Ти дістаєш [[player_entity|телефон]]."
 
 ---
 
-Example 2 (reference, not present in scene):
+Example 2 (confirmed player item):
+Player: "Дістаю ніж"
+Result: item confirmed
+Valid:
+"Ти витягуєш [[player_entity|ніж]] і тримаєш його напоготові."
+Invalid:
+"Ти витягуєш [[scene_entity:available|ніж]] і тримаєш його напоготові."
+
+---
+
+Example 3 (reference, not present in scene):
 Valid:
 "На дошці гільдії висить замовлення на полювання на [[reference:known_reference|вовків біля північного лісу]]."
 Invalid:
@@ -88,7 +109,7 @@ Invalid:
 
 ---
 
-Example 3 (available vs background):
+Example 4 (available vs background):
 Valid:
 "Поруч стоїть [[scene_entity:available|дерев’яний стіл]], а за ним мерехтить [[scene_entity:background|світло свічок]]."
 Explanation:
@@ -99,7 +120,7 @@ Invalid:
 
 ---
 
-Example 4 (avoid structural elements):
+Example 5 (avoid structural elements):
 Invalid:
 "Ти стоїш на [[scene_entity:available|кам’яній підлозі]]."
 Valid:
