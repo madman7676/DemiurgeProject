@@ -131,6 +131,16 @@ def _apply_state_intents(
             }
         )
 
+    for applied_change in action_result.get("applied_changes", []):
+        state_changes.append(
+            {
+                "scope": "entity_transfer",
+                "entity_id": str(applied_change.get("entity_id", "")),
+                "field": "container",
+                "summary": f"{applied_change.get('summary_label', 'Changed')}: {applied_change.get('display_name', applied_change.get('entity_name', 'entity'))}.",
+            }
+        )
+
     for side_effect in action_result["applied_side_effects"]:
         state_changes.append(
             {

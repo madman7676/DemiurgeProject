@@ -282,6 +282,10 @@ class ExplorationPipeline:
                     "outcome_quality": action_result["outcome_quality"],
                     "quality_side_effect_chance": action_result["quality_side_effect_chance"],
                     "quality_side_effect_applied": action_result["quality_side_effect_applied"],
+                    "received_entity_transfers": action_result["state_intents"].get("entity_transfers", []),
+                    "applied_changes": action_result.get("applied_changes", []),
+                    "change_summary": action_result.get("change_summary", []),
+                    "consequence_debug": action_result.get("consequence_debug", {}),
                     "proposed_side_effects": action_result["proposed_side_effects"],
                     "applied_side_effects": action_result["applied_side_effects"],
                     "side_effects": action_result["side_effects"],
@@ -378,6 +382,7 @@ class ExplorationPipeline:
                 }
             )
 
+        visible_state = build_visible_state(session_state)
         emit_update(
             "narrator",
             {
@@ -392,7 +397,12 @@ class ExplorationPipeline:
             raw_player_input,
             annotations=entity_resolution["annotations"],
         )
-        append_message(session_state, "assistant", narrative_text)
+        append_message(
+            session_state,
+            "assistant",
+            narrative_text,
+            change_summary=action_result.get("change_summary", []),
+        )
         decision_cycle: DecisionCycle = {
             "turn": cycle_turn,
             "raw_player_input": raw_player_input,

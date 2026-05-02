@@ -9,7 +9,7 @@ export function TimePanel({ currentTime, nearbyNpcs }) {
       <p className="panel-note">
         Nearby NPCs:{" "}
         {nearbyNpcs.length > 0
-          ? nearbyNpcs.map((npc) => npc.identity.name).join(", ")
+          ? nearbyNpcs.map((npc) => npc.identity?.name || npc.name).join(", ")
           : "None"}
       </p>
     </section>

@@ -88,6 +88,7 @@ export function GameLayout() {
               updatedMessages[lastIndex] = {
                 ...updatedMessages[lastIndex],
                 text: `${updatedMessages[lastIndex].text}${chunk}`,
+                change_summary: [],
               };
             }
             return updatedMessages;

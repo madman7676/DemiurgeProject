@@ -33,6 +33,7 @@ class SessionMessage(TypedDict):
     role: Literal["player", "assistant"]
     text: str
     annotations: NotRequired[list[dict[str, Any]]]
+    change_summary: NotRequired[list[dict[str, str]]]
 
 
 class SceneEntityPoolEntry(TypedDict):
@@ -106,7 +107,8 @@ class VisibleGameState(TypedDict):
     mode: Literal["exploration"]
     current_time: GameTime
     player: PlayerStateContract
-    nearby_npcs: list[NPCStateContract]
+    nearby_npcs: list[dict[str, Any]]
+    scene_pool: NotRequired[list[dict[str, Any]]]
 
 
 class GameSessionState(TypedDict):

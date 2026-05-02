@@ -28,6 +28,11 @@ class StateIntentSignals(TypedDict):
     """Structured state-change intent emitted by Judge."""
 
     position_change: str | None
+    entity_transfers: list[dict[str, Any]]
+    skill_changes: list[dict[str, Any]]
+    stat_changes: list[dict[str, Any]]
+    currency_changes: list[dict[str, Any]]
+    status_effect_changes: list[dict[str, Any]]
     resource_changes: dict[str, Any]
     status_changes: list[str]
     relationship_signals: list[str]
@@ -138,6 +143,9 @@ class ActionProcessingContract(TypedDict):
     time_hints: TimeHints
     reasoning_short: str
     outcome_summary: str
+    applied_changes: list[dict[str, Any]]
+    change_summary: list[dict[str, str]]
+    consequence_debug: dict[str, Any]
     state_changes: list[StateChange]
     npc_reactions: list[NPCReaction]
     time_cost: TimeCost

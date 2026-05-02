@@ -80,14 +80,14 @@ def create_initial_session_state() -> GameSessionState:
 
 
 def get_nearby_npcs(session_state: GameSessionState) -> list[dict[str, Any]]:
-    """Return NPCs in the same current region as the player."""
+    """Return actor-like entries from the current scene pool."""
 
-    player_location = session_state["player_state"]["current_location"]
-    player_region = player_location["region_id"]
     return [
-        npc
-        for npc in session_state["npc_states"]
-        if npc["location"]["region_id"] == player_region
+        entry
+        for entry in session_state.get("scene_pool", session_state.get("scene_entity_pool", []))
+        if entry.get("entity_type") == "actor"
+        or entry.get("subtype") == "npc"
+        or entry.get("raw", {}).get("subtype") == "npc"
     ]
 
 
@@ -108,12 +108,15 @@ def append_message(
     role: SessionMessage["role"],
     text: str,
     annotations: list[dict[str, Any]] | None = None,
+    change_summary: list[dict[str, str]] | None = None,
 ) -> None:
     """Append a player or assistant message to the current session."""
 
     message: SessionMessage = {"role": role, "text": text}
     if annotations:
         message["annotations"] = deepcopy(annotations)
+    if change_summary:
+        message["change_summary"] = deepcopy(change_summary)
     session_state["recent_messages"].append(message)
 
 

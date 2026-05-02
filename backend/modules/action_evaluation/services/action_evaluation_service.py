@@ -401,6 +401,11 @@ class ActionEvaluationService:
             "risk_flags": risk_flags,
             "state_intents": {
                 "position_change": None,
+                "entity_transfers": [],
+                "skill_changes": [],
+                "stat_changes": [],
+                "currency_changes": [],
+                "status_effect_changes": [],
                 "resource_changes": {},
                 "status_changes": [],
                 "relationship_signals": [],
@@ -413,6 +418,9 @@ class ActionEvaluationService:
             },
             "reasoning_short": "Execution was interrupted before the action could begin because entity resolution stayed unresolved or ambiguous.",
             "outcome_summary": "",
+            "applied_changes": [],
+            "change_summary": [],
+            "consequence_debug": {},
             "state_changes": [],
             "npc_reactions": [],
             "time_cost": {"amount": 0, "unit": "minute"},
@@ -441,6 +449,7 @@ class ActionEvaluationService:
                     raw_player_input=raw_player_input,
                     expanded_player_intent=expanded_player_intent,
                     route_decision=route_decision,
+                    judge_input=judge_input,
                 )
             except (json.JSONDecodeError, TypeError, ValueError) as exc:
                 logger.warning("Judge parse/validation failure: %s. Raw response: %s", exc, llm_text)
@@ -493,6 +502,7 @@ class ActionEvaluationService:
                 raw_player_input=raw_player_input,
                 expanded_player_intent=expanded_player_intent,
                 route_decision=route_decision,
+                judge_input=judge_input,
             )
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             logger.warning("Judge repair failed: %s. Raw repair response: %s", exc, repair_response["text"])
@@ -534,6 +544,7 @@ class ActionEvaluationService:
         raw_player_input: str,
         expanded_player_intent: str,
         route_decision: RouteDecision,
+        judge_input: ActionEvaluationInput | None = None,
     ) -> ActionProcessingContract:
         """Validate and repair model output into the required Judge schema."""
 
@@ -548,6 +559,8 @@ class ActionEvaluationService:
         outcome_quality = max(0, min(100, outcome_quality))
 
         state_intents = self._validate_state_intents(parsed.get("state_intents", {}))
+        if not state_intents["entity_transfers"] and judge_input is not None:
+            state_intents["entity_transfers"] = self._infer_entity_transfers(judge_input)
         time_hints = self._validate_time_hints(parsed.get("time_hints", {}))
 
         interpreted_intent: InterpretedIntent = {
@@ -585,6 +598,9 @@ class ActionEvaluationService:
             "reasoning_short": str(parsed.get("reasoning_short", "")).strip()
             or "Judge output repaired from incomplete model response.",
             "outcome_summary": "",
+            "applied_changes": [],
+            "change_summary": [],
+            "consequence_debug": {},
             "state_changes": [],
             "npc_reactions": [],
             "time_cost": {"amount": 0, "unit": "minute"},
@@ -599,11 +615,233 @@ class ActionEvaluationService:
         position_change = data.get("position_change")
         return {
             "position_change": str(position_change).strip() if position_change not in {None, ""} else None,
+            "entity_transfers": self._coerce_entity_transfers(data.get("entity_transfers", [])),
+            "skill_changes": self._coerce_skill_changes(data.get("skill_changes", [])),
+            "stat_changes": self._coerce_stat_changes(data.get("stat_changes", [])),
+            "currency_changes": self._coerce_currency_changes(data.get("currency_changes", [])),
+            "status_effect_changes": self._coerce_status_effect_changes(data.get("status_effect_changes", [])),
             "resource_changes": data.get("resource_changes", {}) if isinstance(data.get("resource_changes", {}), dict) else {},
             "status_changes": self._coerce_string_list(data.get("status_changes", [])),
             "relationship_signals": self._coerce_string_list(data.get("relationship_signals", [])),
             "environment_changes": self._coerce_string_list(data.get("environment_changes", [])),
         }
+
+    def _coerce_entity_transfers(self, value: object) -> list[dict[str, Any]]:
+        """Normalize Judge-proposed entity transfer intents."""
+
+        if not isinstance(value, list):
+            return []
+        transfers: list[dict[str, Any]] = []
+        valid_containers = {"scene_pool", "inventory", "equipped"}
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            entity_id = str(entry.get("entity_id", "")).strip()
+            source = str(entry.get("from", "")).strip()
+            target = str(entry.get("to", "")).strip()
+            if not entity_id or source not in valid_containers or target not in valid_containers or source == target:
+                continue
+            try:
+                quantity = max(1, int(entry.get("quantity", 1)))
+            except (TypeError, ValueError):
+                quantity = 1
+            transfers.append(
+                {
+                    "entity_id": entity_id,
+                    "entity_type": str(entry.get("entity_type", "")).strip() or "item",
+                    "from": source,
+                    "to": target,
+                    "quantity": quantity,
+                    "reason": str(entry.get("reason", "")).strip(),
+                }
+            )
+        return transfers
+
+    def _coerce_skill_changes(self, value: object) -> list[dict[str, Any]]:
+        """Normalize Judge-proposed skill mutation intents."""
+
+        if not isinstance(value, list):
+            return []
+        valid_ops = {"add", "remove", "level_up", "level_down", "set_level"}
+        changes: list[dict[str, Any]] = []
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            op = str(entry.get("op", "")).strip()
+            skill_id = str(entry.get("skill_id", "")).strip()
+            if op not in valid_ops or not skill_id:
+                continue
+            changes.append(
+                {
+                    "op": op,
+                    "skill_id": skill_id,
+                    "skill_data": entry.get("skill_data", {}) if isinstance(entry.get("skill_data", {}), dict) else {},
+                    "amount": self._coerce_positive_number(entry.get("amount", 1)),
+                    "new_value": self._coerce_optional_number(entry.get("new_value")),
+                    "reason": str(entry.get("reason", "")).strip(),
+                }
+            )
+        return changes
+
+    def _coerce_stat_changes(self, value: object) -> list[dict[str, Any]]:
+        """Normalize Judge-proposed stat mutation intents."""
+
+        if not isinstance(value, list):
+            return []
+        valid_ops = {"increase", "decrease", "set"}
+        changes: list[dict[str, Any]] = []
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            op = str(entry.get("op", "")).strip()
+            stat_id = str(entry.get("stat_id", "")).strip()
+            if op not in valid_ops or not stat_id:
+                continue
+            changes.append(
+                {
+                    "op": op,
+                    "stat_id": stat_id,
+                    "amount": self._coerce_positive_number(entry.get("amount", 1)),
+                    "new_value": self._coerce_optional_number(entry.get("new_value")),
+                    "reason": str(entry.get("reason", "")).strip(),
+                }
+            )
+        return changes
+
+    def _coerce_currency_changes(self, value: object) -> list[dict[str, Any]]:
+        """Normalize Judge-proposed currency mutation intents."""
+
+        if not isinstance(value, list):
+            return []
+        valid_ops = {"add", "spend", "set"}
+        changes: list[dict[str, Any]] = []
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            op = str(entry.get("op", "")).strip()
+            currency_id = str(entry.get("currency_id", "")).strip()
+            if op not in valid_ops or not currency_id:
+                continue
+            changes.append(
+                {
+                    "op": op,
+                    "currency_id": currency_id,
+                    "amount": self._coerce_positive_number(entry.get("amount", 1)),
+                    "currency_data": entry.get("currency_data", {}) if isinstance(entry.get("currency_data", {}), dict) else {},
+                    "reason": str(entry.get("reason", "")).strip(),
+                }
+            )
+        return changes
+
+    def _coerce_status_effect_changes(self, value: object) -> list[dict[str, Any]]:
+        """Normalize Judge-proposed status-effect mutation intents."""
+
+        if not isinstance(value, list):
+            return []
+        valid_ops = {"add", "remove", "refresh"}
+        changes: list[dict[str, Any]] = []
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            op = str(entry.get("op", "")).strip()
+            effect_id = str(entry.get("effect_id", "")).strip()
+            if op not in valid_ops or not effect_id:
+                continue
+            changes.append(
+                {
+                    "op": op,
+                    "effect_id": effect_id,
+                    "effect_data": entry.get("effect_data", {}) if isinstance(entry.get("effect_data", {}), dict) else {},
+                    "duration": self._coerce_optional_number(entry.get("duration")),
+                    "reason": str(entry.get("reason", "")).strip(),
+                }
+            )
+        return changes
+
+    def _coerce_positive_number(self, value: object) -> int | float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return 1
+        number = max(1, number)
+        return int(number) if number.is_integer() else number
+
+    def _coerce_optional_number(self, value: object) -> int | float | None:
+        if value in {None, ""}:
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return int(number) if number.is_integer() else number
+
+    def _infer_entity_transfers(self, judge_input: ActionEvaluationInput) -> list[dict[str, Any]]:
+        """Conservatively infer simple transfer intents when Judge omits the field."""
+
+        entity_resolution = judge_input.get("entity_resolution", {})
+        resolved_entities = entity_resolution.get("resolved_entities", [])
+        if not isinstance(resolved_entities, list) or not resolved_entities:
+            return []
+
+        transfer_text = " ".join(
+            [
+                judge_input.get("raw_player_input", ""),
+                judge_input.get("attempted_action", ""),
+                judge_input.get("attempted_method", ""),
+                judge_input.get("primary_intent", ""),
+            ]
+        ).casefold()
+        for entity in resolved_entities:
+            if not isinstance(entity, dict):
+                continue
+            source = self._container_from_resolved_entity(entity)
+            target = self._infer_transfer_target(transfer_text, source)
+            if not source or not target:
+                continue
+            entity_type = str(entity.get("entity_type", "item"))
+            if entity_type in {"actor", "currency", "skill"}:
+                continue
+            return [
+                {
+                    "entity_id": str(entity.get("entity_id", "")).strip(),
+                    "entity_type": entity_type,
+                    "from": source,
+                    "to": target,
+                    "quantity": 1,
+                    "reason": "Inferred simple entity transfer from routed action and resolved entity.",
+                }
+            ]
+        return []
+
+    def _container_from_resolved_entity(self, entity: dict[str, Any]) -> str:
+        source = str(entity.get("candidate_source", "")).strip()
+        truth_status = str(entity.get("truth_status", "")).strip()
+        if source in {"held", "equipment"}:
+            return "equipped"
+        if source == "inventory":
+            return "inventory"
+        if source == "scene_pool" or truth_status == "soft_scene":
+            return "scene_pool"
+        return ""
+
+    def _infer_transfer_target(self, text: str, source: str) -> str:
+        take_terms = ["pick up", "take", "grab", "collect", "підня", "взя", "забра"]
+        drop_terms = ["drop", "leave", "put down", "discard", "кину", "залиш", "покла"]
+        equip_terms = ["equip", "hold", "ready", "wear", "діста", "трима", "вдяг", "озбро"]
+        unequip_terms = ["put away", "unequip", "stow", "прибра", "схова"]
+        if source == "scene_pool" and any(term in text for term in equip_terms):
+            return "equipped"
+        if source == "scene_pool" and any(term in text for term in take_terms):
+            return "inventory"
+        if source == "inventory" and any(term in text for term in equip_terms):
+            return "equipped"
+        if source == "inventory" and any(term in text for term in drop_terms):
+            return "scene_pool"
+        if source == "equipped" and any(term in text for term in unequip_terms):
+            return "inventory"
+        if source == "equipped" and any(term in text for term in drop_terms):
+            return "scene_pool"
+        return ""
 
     def _validate_time_hints(self, value: object) -> TimeHints:
         """Validate Judge time-hint payload."""
@@ -661,6 +899,11 @@ class ActionEvaluationService:
             "risk_flags": [],
             "state_intents": {
                 "position_change": None,
+                "entity_transfers": [],
+                "skill_changes": [],
+                "stat_changes": [],
+                "currency_changes": [],
+                "status_effect_changes": [],
                 "resource_changes": {},
                 "status_changes": [],
                 "relationship_signals": [],
@@ -673,6 +916,9 @@ class ActionEvaluationService:
             },
             "reasoning_short": "Judge fallback used because model output was unavailable or invalid.",
             "outcome_summary": "",
+            "applied_changes": [],
+            "change_summary": [],
+            "consequence_debug": {},
             "state_changes": [],
             "npc_reactions": [],
             "time_cost": {"amount": 0, "unit": "minute"},
