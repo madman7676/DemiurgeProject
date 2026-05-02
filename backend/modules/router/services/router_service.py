@@ -102,7 +102,9 @@ class RouterService:
                     "Do not use markdown or code fences.",
                     "Do not add explanations outside JSON.",
                     "Keep raw_player_input intent primary and context secondary.",
-                    "Include entity_resolution_hint.needed=true only when the action likely depends on a referenced concrete entity, tool, target, actor, skill, item, currency, or interactable.",
+                    "Preserve attempted_method as the concrete means, tool, ability, capability, described effect, or method the player appears to use.",
+                    "Do not collapse method-specific actions into only generic goals.",
+                    "Include entity_resolution_hint.needed=true only when the action likely depends on a referenced or implied concrete entity, tool, target, actor, skill, item, currency, capability, ability, or interactable.",
                     "Do not include canonical entity ids or resolved entity data.",
                 ],
             ),
@@ -174,6 +176,7 @@ class RouterService:
             "action_category": action_category,
             "expanded_player_intent": expanded_player_intent,
             "primary_intent": str(parsed.get("primary_intent", expanded_player_intent)).strip(),
+            "attempted_method": str(parsed.get("attempted_method", expanded_player_intent)).strip(),
             "secondary_elements": self._safe_string_list(parsed.get("secondary_elements", [])),
             "possible_targets": self._safe_string_list(parsed.get("possible_targets", [])),
             "requested_agents": requested_agents,
@@ -209,6 +212,7 @@ class RouterService:
                 "  action_category=%s\n"
                 "  expanded_player_intent=%s\n"
                 "  primary_intent=%s\n"
+                "  attempted_method=%s\n"
                 "  secondary_elements=%s\n"
                 "  possible_targets=%s\n"
                 "  requested_agents=%s\n"
@@ -220,6 +224,7 @@ class RouterService:
             route_decision["action_category"],
             route_decision["expanded_player_intent"],
             route_decision["primary_intent"],
+            route_decision.get("attempted_method", ""),
             route_decision["secondary_elements"],
             route_decision["possible_targets"],
             route_decision["requested_agents"],
@@ -278,6 +283,7 @@ class RouterService:
             "action_category": action_category,
             "expanded_player_intent": expanded_intent,
             "primary_intent": primary_intent,
+            "attempted_method": expanded_intent,
             "secondary_elements": [],
             "possible_targets": possible_targets,
             "requested_agents": requested_agents,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from backend.core.game_state.contracts import QuickChoice
 
@@ -48,6 +48,7 @@ class RouteDecision(TypedDict):
     action_category: Literal["speech", "inspection", "movement", "question", "idle", "combat_attempt"]
     expanded_player_intent: str
     primary_intent: str
+    attempted_method: NotRequired[str]
     secondary_elements: list[str]
     possible_targets: list[str]
     requested_agents: list[str]

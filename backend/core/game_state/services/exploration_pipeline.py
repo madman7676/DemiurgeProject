@@ -140,6 +140,7 @@ class ExplorationPipeline:
                     "raw_player_input": raw_player_input,
                     "expanded_player_intent": route["expanded_player_intent"],
                     "primary_intent": route["primary_intent"],
+                    "attempted_method": route.get("attempted_method", ""),
                     "secondary_elements": route["secondary_elements"],
                     "possible_targets": route["possible_targets"],
                     "requested_agents": route["requested_agents"],

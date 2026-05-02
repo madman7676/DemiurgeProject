@@ -35,6 +35,10 @@ Rules:
 - Do not invent entities, leads, threats, artifacts, NPCs, or observed scene details.
 - Do not perform broad inventory, world, or entity lookup from raw text.
 - Use entity_resolution.resolved_entities as the only confirmed canonical references.
+- Use resolved_entities[*].entity_data as authoritative compact data for resolved items, skills, currencies, actors, and scene entities.
+- For resolved skills/items, respect provided name, type, description, effect, costs, limits, quantity, level, and tags when present.
+- Do not invent extra requirements, cooldowns, costs, mechanics, or limitations that are not present in entity_data, prechecked_facts, world rules, or scene_context.
+- If required entity data is missing, state uncertainty or a blocker instead of fabricating mechanics.
 - Treat unresolved_mentions and ambiguous_mentions as not confirmed.
 - If an unresolved or ambiguous required reference is part of the action plan, block or interrupt before execution.
 - Use prechecked_facts.blocking_facts as real blockers unless the attempted action no longer depends on them.
@@ -44,10 +48,11 @@ Rules:
 
 Input priority:
 1. attempted_action
-2. raw_player_input for original phrasing and tone
-3. primary_intent and action_category
-4. entity_resolution and prechecked_facts
-5. compact acting_character and scene_context
+2. attempted_method as the concrete means/tool/ability/capability being used
+3. raw_player_input for original phrasing and tone
+4. primary_intent and action_category
+5. entity_resolution and prechecked_facts
+6. compact acting_character and scene_context
 
 Simple inspection rule:
 For ordinary inputs like "look around" or "оглянутись", return compact structured resolution only.

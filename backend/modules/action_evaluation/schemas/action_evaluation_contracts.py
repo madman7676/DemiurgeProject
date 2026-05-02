@@ -104,6 +104,7 @@ class ActionEvaluationInput(TypedDict):
 
     raw_player_input: str
     attempted_action: str
+    attempted_method: str
     primary_intent: str
     action_category: str
     game_mode: str

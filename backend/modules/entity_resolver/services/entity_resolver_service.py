@@ -74,22 +74,36 @@ class LLMSemanticEntityMatcher:
 
         system_prompt = (
             "You are the Entity Resolver for a structured text adventure backend.\n"
-            "Your job is to identify entity references required by the routed player intent.\n"
-            "Choose only from the provided candidate_entities list or mark a mention unresolved/ambiguous.\n"
-            "Do not invent entities, ids, names, locations, items, skills, actors, currencies, or interactables.\n"
-            "Use router_output.expanded_player_intent as the primary semantic source.\n"
+            "You are a semantic bridge between player phrasing and available affordances.\n"
+            "Ask: which available candidate best explains this player attempt?\n"
+            "Compare player wording and routed method against each candidate's name, aliases, description, type, effect, usage semantics, costs, limits, and source.\n"
+            "Support abbreviations, slang, translated names, partial names, paraphrased descriptions, described effects, intended outcomes, and indirect references.\n"
+            "Do not treat router_output.entity_resolution_hint as a hard type constraint.\n"
+            "Choose only from candidate_entities or mark the reference unresolved/ambiguous.\n"
+            "Never invent entities, ids, names, locations, items, skills, actors, currencies, or interactables.\n"
+            "Use router_output.expanded_player_intent and attempted_method as the primary semantic sources.\n"
             "Use raw_player_input mainly to preserve source_text for UI marking.\n"
             "Return strict JSON only. Do not use markdown. Do not add explanations outside JSON."
         )
         user_prompt = json.dumps(
             {
-                "task": "Resolve concrete entity references against provided candidates only.",
+                "task": "Resolve implied or referenced entity/capability usage against provided candidates only.",
+                "semantic_question": "Which available candidate best explains the player's attempted method or intended outcome?",
                 "input_priority": [
                     "router_output.entity_resolution_hint",
                     "router_output.expanded_player_intent",
+                    "router_output.attempted_method",
                     "router_output.primary_intent",
                     "raw_player_input",
                     "candidate_entities",
+                ],
+                "matching_guidance": [
+                    "Do not rely primarily on exact names or aliases.",
+                    "Use candidate descriptions, effects, usage semantics, costs, and limits when present.",
+                    "If one candidate clearly explains the attempt, resolve it with confidence >= 0.70.",
+                    "If several candidates plausibly explain the attempt, return ambiguous_mentions.",
+                    "If no candidate explains the attempt, return unresolved_mentions.",
+                    "Do not invent or transform candidate ids.",
                 ],
                 **request,
                 "output_contract": {
@@ -617,22 +631,48 @@ class EntityResolverService:
                 "entity_resolution_hint": route_decision.get("entity_resolution_hint", {"needed": False, "reason": ""}),
                 "expanded_player_intent": route_decision["expanded_player_intent"],
                 "primary_intent": route_decision["primary_intent"],
+                "attempted_method": route_decision.get("attempted_method", ""),
                 "action_category": route_decision["action_category"],
                 "possible_targets": route_decision["possible_targets"],
             },
             "candidate_entities": [
-                {
-                    "entity_type": candidate["entity_type"],
-                    "entity_id": candidate["entity_id"],
-                    "name": candidate["name"],
-                    "aliases": candidate["aliases"],
-                    "source": candidate["source"],
-                    "confidence_base": candidate["confidence_base"],
-                }
+                self._candidate_semantic_summary(candidate)
                 for candidate in candidates
             ],
         }
         return self._semantic_matcher.resolve(request)
+
+    def _candidate_semantic_summary(self, candidate: ResolverCandidate) -> dict[str, Any]:
+        """Send compact affordance data to the semantic resolver."""
+
+        raw = candidate["raw"] if isinstance(candidate["raw"], dict) else {}
+        return {
+            "entity_type": candidate["entity_type"],
+            "entity_id": candidate["entity_id"],
+            "name": candidate["name"],
+            "aliases": candidate["aliases"],
+            "source": candidate["source"],
+            "confidence_base": candidate["confidence_base"],
+            "description": self._compact_value(raw.get("description", "")),
+            "effect": self._compact_value(raw.get("effect", raw.get("effects", ""))),
+            "usage": self._compact_value(raw.get("usage", raw.get("use", raw.get("usage_semantics", "")))),
+            "costs": self._compact_value(raw.get("costs", raw.get("cost", ""))),
+            "limits": self._compact_value(raw.get("limits", raw.get("limitations", ""))),
+            "tags": raw.get("tags", []) if isinstance(raw.get("tags", []), list) else [],
+            "quantity": raw.get("quantity"),
+            "level": raw.get("level"),
+        }
+
+    def _compact_value(self, value: object) -> object:
+        """Keep candidate semantic fields readable but bounded."""
+
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, list):
+            return value[:8]
+        if isinstance(value, dict):
+            return {str(key): value[key] for key in list(value)[:12]}
+        return str(value)[:300]
 
     def _build_result_lists(
         self,
@@ -675,6 +715,16 @@ class EntityResolverService:
                     )
                 continue
             confidence = self._safe_confidence(raw_entity.get("confidence", 0.0))
+            if confidence < 0.7:
+                unresolved_mentions.append(
+                    self._unresolved_from_text(
+                        raw_player_input=raw_player_input,
+                        source_text=source_text or candidate["name"],
+                        type_hint=entity_type,
+                        reason="Semantic resolver confidence was below the safe resolution threshold.",
+                    )
+                )
+                continue
             span = self._find_span(raw_player_input, source_text)
             resolved_by_key[(candidate["entity_type"], candidate["entity_id"])] = self._resolved_from_candidate(
                 source_text=source_text or candidate["name"],

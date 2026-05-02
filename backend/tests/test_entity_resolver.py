@@ -144,6 +144,80 @@ class EntityResolverTests(unittest.TestCase):
         self.assertEqual(result["annotations"][0]["display_text"], "компас")
         self.assertEqual(matcher.last_request["router_output"]["expanded_player_intent"], "use the compass")
 
+    def test_affordance_semantics_include_candidate_effect_data(self) -> None:
+        matcher = FakeSemanticMatcher(
+            {
+                "resolved_entities": [
+                    {
+                        "source_text": "safe blink",
+                        "entity_type": "skill",
+                        "entity_id": "save_spot",
+                        "canonical_name": "Save Spot",
+                        "confidence": 0.91,
+                        "reason": "The requested effect matches the skill description.",
+                    }
+                ],
+                "unresolved_mentions": [],
+                "ambiguous_mentions": [],
+            }
+        )
+        service = EntityResolverService(semantic_matcher=matcher)
+        self.route["expanded_player_intent"] = "blink to safety"
+        self.route["primary_intent"] = "escape immediate danger"
+        self.route["attempted_method"] = "use a quick safe teleport ability"
+        self.route["entity_resolution_hint"] = {
+            "needed": True,
+            "reason": "The player appears to use or imply a specific capability.",
+        }
+
+        result = service.resolve_entities("safe blink звідси", self.route, self.session_state)
+
+        self.assertEqual(result["resolved_entities"][0]["entity_id"], "save_spot")
+        self.assertIn("description", result["resolved_entities"][0]["entity_data"])
+        self.assertEqual(
+            matcher.last_request["router_output"]["attempted_method"],
+            "use a quick safe teleport ability",
+        )
+        save_spot_candidate = next(
+            candidate
+            for candidate in matcher.last_request["candidate_entities"]
+            if candidate["entity_id"] == "save_spot"
+        )
+        self.assertIn("teleports", save_spot_candidate["description"])
+        self.assertEqual(save_spot_candidate["effect"]["teleport_to"], "nearest_safe_spot")
+
+    def test_low_confidence_semantic_resolution_becomes_unresolved(self) -> None:
+        service = EntityResolverService(
+            semantic_matcher=FakeSemanticMatcher(
+                {
+                    "resolved_entities": [
+                        {
+                            "source_text": "some trick",
+                            "entity_type": "skill",
+                            "entity_id": "save_spot",
+                            "canonical_name": "Save Spot",
+                            "confidence": 0.42,
+                            "reason": "Weak guess.",
+                        }
+                    ],
+                    "unresolved_mentions": [],
+                    "ambiguous_mentions": [],
+                }
+            )
+        )
+        self.route["expanded_player_intent"] = "do some trick"
+        self.route["attempted_method"] = "some unclear trick"
+        self.route["entity_resolution_hint"] = {
+            "needed": True,
+            "reason": "The player may imply a capability.",
+        }
+
+        result = service.resolve_entities("роблю якийсь трюк", self.route, self.session_state)
+
+        self.assertEqual(result["resolved_entities"], [])
+        self.assertEqual(result["resolver_status"], "has_unresolved")
+        self.assertEqual(result["unresolved_mentions"][0]["source_text"], "some trick")
+
     def test_cross_language_reference_without_candidate_becomes_unresolved(self) -> None:
         self.session_state["player_state"]["inventory"] = [
             {"item_id": "travel_cloak", "name": "Travel Cloak", "quantity": 1, "aliases": []}

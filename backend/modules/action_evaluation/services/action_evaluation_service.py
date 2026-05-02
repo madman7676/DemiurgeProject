@@ -169,6 +169,7 @@ class ActionEvaluationService:
         judge_input: ActionEvaluationInput = {
             "raw_player_input": raw_player_input or "",
             "attempted_action": attempted_action,
+            "attempted_method": route_decision.get("attempted_method", attempted_action),
             "primary_intent": route_decision["primary_intent"],
             "action_category": route_decision["action_category"],
             "game_mode": session_state.get("mode", "exploration") or "exploration",

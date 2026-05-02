@@ -51,6 +51,7 @@ class RouterEntityHintTests(unittest.TestCase):
             "action_category": "inspection",
             "expanded_player_intent": "use the compass",
             "primary_intent": "orient oneself",
+            "attempted_method": "use a compass",
             "secondary_elements": [],
             "possible_targets": [],
             "requested_agents": [],
@@ -65,6 +66,7 @@ class RouterEntityHintTests(unittest.TestCase):
         route = service.route_message(self._router_input("використати компас"))
         self.assertTrue(route["entity_resolution_hint"]["needed"])
         self.assertEqual(route["expanded_player_intent"], "use the compass")
+        self.assertEqual(route["attempted_method"], "use a compass")
         self.assertNotIn("item_id", json.dumps(route))
         self.assertNotIn("old_compass", json.dumps(route))
 
