@@ -291,19 +291,9 @@ class EntityResolverService:
         )
         if location_changed or time_advanced >= 60:
             session_state["scene_entity_pool"] = []
+            session_state["scene_pool"] = session_state["scene_entity_pool"]  # type: ignore[typeddict-unknown-key]
 
-        pool_entries = session_state["scene_entity_pool"]
-        region_id = str(current_location.get("region_id", "place"))
-        detail = str(current_location.get("detail", "")).strip()
-        self._ensure_scene_entry(
-            pool_entries,
-            entity_type="scene_entity",
-            entity_id=f"scene:{self._slugify(region_id)}",
-            name=region_id.replace("_", " ").title(),
-            aliases=[detail] if detail else [],
-            source="scene_context",
-        )
-
+        pool_entries = self._session_scene_pool(session_state)
         for resolved_entity in resolved_entities or []:
             if resolved_entity["truth_status"] != "soft_scene":
                 continue
@@ -317,10 +307,12 @@ class EntityResolverService:
             )
 
         session_state["scene_pool_anchor"] = {
-            "region_id": region_id,
-            "detail": detail,
+            "region_id": str(current_location.get("region_id", "place")),
+            "detail": str(current_location.get("detail", "")).strip(),
             "turn": session_state["turn_count"],
         }
+        session_state["scene_entity_pool"] = pool_entries
+        session_state["scene_pool"] = pool_entries  # type: ignore[typeddict-unknown-key]
 
     def _build_candidates(self, session_state: GameSessionState) -> list[ResolverCandidate]:
         """Collect candidates from bounded local scopes only."""
@@ -333,10 +325,22 @@ class EntityResolverService:
         candidates.extend(self._build_skill_candidates(player_state.get("skills", [])))
         candidates.extend(self._build_currency_candidates(player_state.get("currencies", [])))
         candidates.extend(self._build_actor_candidates(session_state))
-        candidates.extend(self._build_scene_pool_candidates(session_state.get("scene_entity_pool", [])))
-        candidates.extend(self._build_available_scene_entity_candidates(session_state))
+        candidates.extend(
+            self._build_scene_pool_candidates(
+                self._session_scene_pool(session_state)
+            )
+        )
         candidates.extend(self._build_explicit_contextual_candidates(session_state))
         return self._dedupe_candidates(candidates)
+
+    def _session_scene_pool(self, session_state: GameSessionState) -> list[SceneEntityPoolEntry]:
+        """Read the current scene pool while preserving legacy key compatibility."""
+
+        scene_pool = session_state.get("scene_pool", [])  # type: ignore[typeddict-unknown-key]
+        legacy_pool = session_state.get("scene_entity_pool", [])
+        if isinstance(scene_pool, list) and scene_pool:
+            return scene_pool
+        return legacy_pool if isinstance(legacy_pool, list) else []
 
     def _collect_provider_sources(self, session_state: GameSessionState) -> list[str]:
         """Report enabled provider scopes before canonical de-duplication."""
@@ -355,9 +359,7 @@ class EntityResolverService:
             sources.add("currencies")
         if self._build_actor_candidates(session_state):
             sources.add("actors")
-        if session_state.get("scene_entity_pool"):
-            sources.add("scene_pool")
-        if session_state.get("available_scene_entities"):
+        if self._session_scene_pool(session_state):
             sources.add("scene_pool")
         if self._build_explicit_contextual_candidates(session_state):
             sources.add("contextual")
@@ -461,27 +463,6 @@ class EntityResolverService:
                     "source": "contextual",
                     "confidence_base": "soft",
                     "raw": entry.get("raw", entry),
-                }
-            )
-        return candidates
-
-    def _build_available_scene_entity_candidates(self, session_state: GameSessionState) -> list[ResolverCandidate]:
-        """Expose narrator-marked available entities as soft scene candidates."""
-
-        candidates: list[ResolverCandidate] = []
-        for entry in session_state.get("available_scene_entities", []):
-            name = str(entry.get("name", "")).strip()
-            if not name:
-                continue
-            candidates.append(
-                {
-                    "entity_type": "scene_entity",
-                    "entity_id": f"scene:candidate:{self._slugify(name)}",
-                    "name": name,
-                    "aliases": self._build_aliases(name, []),
-                    "source": "scene_pool",
-                    "confidence_base": "soft",
-                    "raw": entry,
                 }
             )
         return candidates

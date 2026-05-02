@@ -13,6 +13,7 @@ from backend.core.game_state.services.session_service import (
     append_message,
     build_visible_state,
 )
+from backend.core.game_state.services.scene_memory_service import apply_narrator_scene_memory
 from backend.core.game_state.services.state_update_service import apply_state_updates
 from backend.modules.action_evaluation.schemas.action_evaluation_contracts import (
     ActionProcessingContract,
@@ -31,6 +32,7 @@ from backend.modules.narrator.services.narrator_service import (
     NarratorService,
     detect_output_language,
     extract_available_entities,
+    extract_narrator_mentions,
     store_scene_candidates,
 )
 from backend.modules.router.schemas.router_contracts import (
@@ -82,12 +84,17 @@ class ExplorationPipeline:
         raw_player_input: str,
         on_narration_chunk=None,
         on_status: Callable[[str], None] | None = None,
+        on_pipeline_update: Callable[[dict], None] | None = None,
     ) -> ExplorationPipelineResult:
         """Process one exploration action from input to visible frontend result."""
 
         def emit_status(step: str) -> None:
             if on_status:
                 on_status(step)
+
+        def emit_update(step: str, payload: dict) -> None:
+            if on_pipeline_update:
+                on_pipeline_update({"step": step, "turn": cycle_turn, **payload})
 
         session_state = self._session_store.get_session()
         if not session_state.get("output_language"):
@@ -131,8 +138,7 @@ class ExplorationPipeline:
 
         emit_status("router")
         route = self._router_service.route_message(router_input)
-        decision_events.append(
-            {
+        router_event: DecisionEvent = {
                 "source": "router",
                 "message": f"Expanded intent routed as {route['primary_intent']}.",
                 "details": {
@@ -149,6 +155,14 @@ class ExplorationPipeline:
                     "entity_resolution_hint": route["entity_resolution_hint"],
                 },
             }
+        decision_events.append(router_event)
+        emit_update(
+            "router",
+            {
+                "event": router_event,
+                "route": route,
+                "decision_events": list(decision_events),
+            },
         )
         # Entity resolution is intentionally quiet in the player UI for now; debug panel still captures details.
         entity_resolution = self._entity_resolver_service.resolve_entities(
@@ -156,8 +170,7 @@ class ExplorationPipeline:
             route_decision=route,
             session_state=session_state,
         )
-        decision_events.append(
-            {
+        entity_resolver_event: DecisionEvent = {
                 "source": "entity_resolver",
                 "message": "Resolved canonical entity references from raw input.",
                 "details": {
@@ -170,6 +183,19 @@ class ExplorationPipeline:
                     "debug": entity_resolution["debug"],
                 },
             }
+        decision_events.append(entity_resolver_event)
+        emit_update(
+            "entity_resolver",
+            {
+                "event": entity_resolver_event,
+                "entity_resolution": entity_resolution,
+                "user_message": {
+                    "role": "player",
+                    "text": raw_player_input,
+                    "annotations": entity_resolution["annotations"],
+                },
+                "decision_events": list(decision_events),
+            },
         )
         emit_status("judge")
         action_result = self._action_evaluation_service.evaluate_action(
@@ -178,8 +204,7 @@ class ExplorationPipeline:
             entity_resolution=entity_resolution,
             session_state=session_state,
         )
-        decision_events.append(
-            {
+        judge_event: DecisionEvent = {
                 "source": "action_evaluation",
                 "message": "Judge resolved the attempted action.",
                 "details": {
@@ -193,6 +218,14 @@ class ExplorationPipeline:
                     "reasoning_short": action_result["reasoning_short"],
                 },
             }
+        decision_events.append(judge_event)
+        emit_update(
+            "judge",
+            {
+                "event": judge_event,
+                "result": action_result,
+                "decision_events": list(decision_events),
+            },
         )
         emit_status("time")
         if "interrupted_before_execution" in action_result["risk_flags"]:
@@ -299,22 +332,56 @@ class ExplorationPipeline:
             output_language=session_state.get("output_language", "uk"),
             on_token=on_narration_chunk,
         )
+        narrator_mentions = extract_narrator_mentions(narrative_text)
         scene_candidates = extract_available_entities(narrative_text)
         store_scene_candidates(session_state, scene_candidates)
+        scene_memory_debug = apply_narrator_scene_memory(
+            session_state=session_state,
+            narrator_output=narrative_text,
+            parsed_mentions=narrator_mentions,
+            entity_resolution=entity_resolution,
+            current_turn=cycle_turn,
+        )
         self._entity_resolver_service.refresh_scene_entity_pool(
             session_state=session_state,
             narrative_text=narrative_text,
             resolved_entities=entity_resolution["resolved_entities"],
             time_advanced=int(action_result["time_cost"]["amount"]),
         )
-        if scene_candidates:
+        if (
+            scene_candidates
+            or scene_memory_debug["scene_pool_updates"]
+            or scene_memory_debug["reference_pool_updates"]
+            or scene_memory_debug["player_entity_mentions"]
+            or scene_memory_debug["validation_warnings"]
+            or scene_memory_debug["cleanup_removals"]
+        ):
             decision_events.append(
                 {
-                    "source": "narrator",
-                    "message": "Stored narrator-marked available scene entity candidates.",
-                    "details": {"scene_entity_candidates": scene_candidates},
+                    "source": "scene_memory",
+                    "message": "Stored narrator-marked scene memory candidates.",
+                    "details": {
+                        "raw_narrator_output": scene_memory_debug["raw_narrator_output"],
+                        "parsed_mentions": scene_memory_debug["parsed_mentions"],
+                        "scene_entity_candidates": scene_candidates,
+                        "scene_entity_mentions": scene_memory_debug["scene_entity_mentions"],
+                        "reference_mentions": scene_memory_debug["reference_mentions"],
+                        "player_entity_mentions": scene_memory_debug["player_entity_mentions"],
+                        "scene_pool_updates": scene_memory_debug["scene_pool_updates"],
+                        "reference_pool_updates": scene_memory_debug["reference_pool_updates"],
+                        "cleanup_removals": scene_memory_debug["cleanup_removals"],
+                        "validation_warnings": scene_memory_debug["validation_warnings"],
+                    },
                 }
             )
+
+        emit_update(
+            "narrator",
+            {
+                "narrative_text": narrative_text,
+                "decision_events": list(decision_events),
+            },
+        )
 
         append_message(
             session_state,

@@ -161,6 +161,27 @@ class NarratorV1Tests(unittest.TestCase):
             ["router", "judge", "time", "consequence", "narrator"],
         )
 
+    def test_pipeline_emits_progressive_step_updates(self) -> None:
+        session_store = InMemorySessionStore()
+        pipeline = ExplorationPipeline(
+            session_store=session_store,
+            router_service=_RouterStub(),
+            entity_resolver_service=_ResolverStub(),
+            action_evaluation_service=_ActionStub(),
+            narrator_service=_NarratorStub(),
+        )
+        updates: list[dict] = []
+
+        pipeline.process_player_message("оглянутись", on_pipeline_update=updates.append)
+
+        self.assertEqual(
+            [update["step"] for update in updates],
+            ["router", "entity_resolver", "judge", "narrator"],
+        )
+        self.assertEqual(updates[1]["user_message"]["annotations"], [])
+        self.assertEqual(updates[-1]["narrative_text"], "Ти бачиш [[scene_entity:available|криниця]].")
+        self.assertTrue(updates[-1]["decision_events"])
+
 
 class _RouterStub:
     def route_message(self, router_input: dict) -> dict:

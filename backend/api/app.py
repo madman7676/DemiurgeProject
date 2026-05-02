@@ -141,6 +141,7 @@ def _stream_message_response(payload: dict[str, Any], context: RouteContext):
                 str(payload.get("message", "")),
                 on_narration_chunk=lambda chunk: emit({"type": "narration_delta", "text": chunk}),
                 on_status=lambda step: emit({"type": "status", "step": step}),
+                on_pipeline_update=lambda update: emit({"type": "pipeline_update", **update}),
             )
             emit(
                 {

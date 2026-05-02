@@ -16,7 +16,7 @@ export async function sendPlayerMessage(message) {
 
 export async function sendPlayerMessageStream(
   message,
-  { onNarrationDelta, onStatus } = {},
+  { onNarrationDelta, onPipelineUpdate, onStatus } = {},
 ) {
   const response = await fetch("/api/message/stream", {
     method: "POST",
@@ -52,6 +52,8 @@ export async function sendPlayerMessageStream(
       const event = JSON.parse(line);
       if (event.type === "status") {
         onStatus?.(event.step || "");
+      } else if (event.type === "pipeline_update") {
+        onPipelineUpdate?.(event);
       } else if (event.type === "narration_delta") {
         onNarrationDelta?.(event.text || "");
       } else if (event.type === "text") {
@@ -68,6 +70,8 @@ export async function sendPlayerMessageStream(
     const event = JSON.parse(buffer);
     if (event.type === "status") {
       onStatus?.(event.step || "");
+    } else if (event.type === "pipeline_update") {
+      onPipelineUpdate?.(event);
     } else if (event.type === "narration_delta") {
       onNarrationDelta?.(event.text || "");
     } else if (event.type === "text") {

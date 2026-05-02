@@ -6,6 +6,7 @@ from collections.abc import Callable
 import json
 from pathlib import Path
 import re
+import unicodedata
 from typing import Any
 
 from backend.modules.action_evaluation.schemas.action_evaluation_contracts import (
@@ -16,7 +17,9 @@ from backend.modules.router.schemas.router_contracts import RouteDecision
 
 
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "narration.txt"
-AVAILABLE_ENTITY_PATTERN = re.compile(r"\[\[scene_entity:available\|([^\]]+)\]\]")
+NARRATOR_MARKER_PATTERN = re.compile(r"\[\[([^\|\]]+)\|([^\]]+)\]\]")
+PUNCTUATION_PATTERN = re.compile(r"[^\w\s'-]", re.UNICODE)
+SPACE_PATTERN = re.compile(r"\s+")
 
 
 class NarratorService:
@@ -175,16 +178,69 @@ def sanitize_narrator_output(raw_text: str) -> str:
 def extract_available_entities(narrative_text: str) -> list[dict[str, str]]:
     """Extract v1 available scene entity markers from final narrator text."""
 
+    mentions = extract_narrator_mentions(narrative_text)
     candidates: list[dict[str, str]] = []
     seen: set[str] = set()
-    for match in AVAILABLE_ENTITY_PATTERN.finditer(narrative_text):
-        name = match.group(1).strip()
-        key = name.casefold()
-        if not name or key in seen:
+    for mention in mentions["scene_entity_mentions"]:
+        if mention["status"] != "available":
+            continue
+        key = mention["normalized_name"]
+        if not mention["name"] or key in seen:
             continue
         seen.add(key)
-        candidates.append({"name": name, "source": "narrator", "status": "candidate"})
+        candidates.append(
+            {
+                "name": mention["name"],
+                "source": "narrator",
+                "status": "candidate",
+            }
+        )
     return candidates
+
+
+def extract_narrator_mentions(narrative_text: str) -> dict[str, list[dict[str, Any]]]:
+    """Extract structured narrator marker mentions from final narrator text."""
+
+    mentions: dict[str, list[dict[str, Any]]] = {
+        "scene_entity_mentions": [],
+        "reference_mentions": [],
+        "player_entity_mentions": [],
+    }
+    for match in NARRATOR_MARKER_PATTERN.finditer(narrative_text):
+        marker_type = match.group(1).strip()
+        name = match.group(2).strip()
+        normalized_name = normalize_scene_memory_name(name)
+        if not name or not normalized_name:
+            continue
+        base = {
+            "name": name,
+            "normalized_name": normalized_name,
+            "type": marker_type,
+            "source": "narrator",
+            "span": {"start": match.start(), "end": match.end()},
+        }
+        if marker_type in {"scene_entity:available", "scene_entity:background"}:
+            mentions["scene_entity_mentions"].append(
+                {
+                    **base,
+                    "status": marker_type.split(":", 1)[1],
+                }
+            )
+        elif marker_type == "reference:known_reference":
+            mentions["reference_mentions"].append(
+                {
+                    **base,
+                    "status": "known_reference",
+                }
+            )
+        elif marker_type == "player_entity":
+            mentions["player_entity_mentions"].append(
+                {
+                    **base,
+                    "status": "candidate",
+                }
+            )
+    return mentions
 
 
 def store_scene_candidates(session_state: dict[str, Any], candidates: list[dict[str, str]]) -> None:
@@ -200,6 +256,16 @@ def store_scene_candidates(session_state: dict[str, Any], candidates: list[dict[
             continue
         seen.add(key)
         existing.append(candidate)
+
+
+def normalize_scene_memory_name(value: str) -> str:
+    """Normalize scene-memory names for stable in-scene upserts."""
+
+    normalized = unicodedata.normalize("NFKD", str(value)).casefold().strip()
+    normalized = "".join(character for character in normalized if not unicodedata.combining(character))
+    normalized = PUNCTUATION_PATTERN.sub(" ", normalized)
+    normalized = SPACE_PATTERN.sub(" ", normalized).strip()
+    return normalized
 
 
 def _safe_list(value: object) -> list[Any]:

@@ -41,8 +41,16 @@ class SceneEntityPoolEntry(TypedDict):
     entity_type: Literal["scene_entity", "interactable"]
     entity_id: str
     name: str
+    normalized_name: NotRequired[str]
     aliases: list[str]
     source: str
+    status: NotRequired[Literal["available", "background"]]
+    truth_status: NotRequired[Literal["soft_scene"]]
+    scene_id: NotRequired[str]
+    location_id: NotRequired[str]
+    first_seen_turn: NotRequired[int]
+    last_seen_turn: NotRequired[int]
+    mention_count: NotRequired[int]
     raw: dict[str, Any]
 
 
@@ -58,8 +66,22 @@ class AvailableSceneEntityCandidate(TypedDict):
     """Temporary v1 scene entity candidate emitted by narrator markers."""
 
     name: str
+    normalized_name: NotRequired[str]
     source: str
-    status: Literal["candidate"]
+    status: str
+
+
+class ReferencePoolEntry(TypedDict):
+    """Known off-scene reference mentioned by narration."""
+
+    reference_id: str
+    name: str
+    normalized_name: str
+    status: Literal["known_reference"]
+    availability: Literal["not_present"]
+    first_seen_turn: int
+    last_seen_turn: int
+    mention_count: int
 
 
 class DecisionEvent(TypedDict):
@@ -100,8 +122,10 @@ class GameSessionState(TypedDict):
     last_presented_choices: list[QuickChoice]
     recent_messages: list[SessionMessage]
     decision_history: list[DecisionCycle]
+    scene_pool: list[SceneEntityPoolEntry]
     scene_entity_pool: list[SceneEntityPoolEntry]
     available_scene_entities: list[AvailableSceneEntityCandidate]
+    reference_pool: list[ReferencePoolEntry]
     output_language: NotRequired[str]
     scene_pool_anchor: ScenePoolAnchor
     interruption_pressure: int

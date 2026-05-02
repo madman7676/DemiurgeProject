@@ -49,6 +49,35 @@ export function GameLayout() {
         onStatus: (step) => {
           setCurrentPipelineStep(step);
         },
+        onPipelineUpdate: (update) => {
+          if (update.step === "entity_resolver" && update.user_message) {
+            setMessages((currentMessages) =>
+              patchLastPlayerMessage(currentMessages, update.user_message),
+            );
+          }
+          if (update.step === "narrator" && update.narrative_text) {
+            setMessages((currentMessages) =>
+              patchLastAssistantMessage(currentMessages, update.narrative_text),
+            );
+          }
+          if (update.decision_events) {
+            setDecisionHistory((currentHistory) =>
+              upsertDecisionCycle(currentHistory, {
+                turn: update.turn,
+                raw_player_input: message,
+                events: update.decision_events,
+              }),
+            );
+          } else if (update.event) {
+            setDecisionHistory((currentHistory) =>
+              appendDecisionEvent(currentHistory, {
+                turn: update.turn,
+                raw_player_input: message,
+                event: update.event,
+              }),
+            );
+          }
+        },
         onNarrationDelta: (chunk) => {
           setCurrentPipelineStep("");
           setMessages((currentMessages) => {
@@ -103,4 +132,62 @@ export function GameLayout() {
       </aside>
     </main>
   );
+}
+
+function patchLastPlayerMessage(messages, userMessage) {
+  const updatedMessages = [...messages];
+  for (let index = updatedMessages.length - 1; index >= 0; index -= 1) {
+    if (updatedMessages[index].role === "player") {
+      updatedMessages[index] = {
+        ...updatedMessages[index],
+        annotations: userMessage.annotations || [],
+      };
+      break;
+    }
+  }
+  return updatedMessages;
+}
+
+function patchLastAssistantMessage(messages, text) {
+  const updatedMessages = [...messages];
+  for (let index = updatedMessages.length - 1; index >= 0; index -= 1) {
+    if (updatedMessages[index].role === "assistant") {
+      updatedMessages[index] = {
+        ...updatedMessages[index],
+        text,
+      };
+      break;
+    }
+  }
+  return updatedMessages;
+}
+
+function upsertDecisionCycle(history, cycle) {
+  if (!cycle.turn) {
+    return history;
+  }
+  const existingIndex = history.findIndex((item) => item.turn === cycle.turn);
+  if (existingIndex < 0) {
+    return [...history, cycle];
+  }
+  return history.map((item, index) => (index === existingIndex ? cycle : item));
+}
+
+function appendDecisionEvent(history, { turn, raw_player_input, event }) {
+  if (!turn || !event) {
+    return history;
+  }
+  const existingIndex = history.findIndex((item) => item.turn === turn);
+  if (existingIndex < 0) {
+    return [...history, { turn, raw_player_input, events: [event] }];
+  }
+  return history.map((cycle, index) => {
+    if (index !== existingIndex) {
+      return cycle;
+    }
+    return {
+      ...cycle,
+      events: [...cycle.events, event],
+    };
+  });
 }

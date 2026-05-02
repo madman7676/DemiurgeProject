@@ -55,6 +55,7 @@ def create_initial_session_state() -> GameSessionState:
     """Build a single minimal session using documentation example data."""
 
     player_state = _load_json("player_state/data/player.example.json")
+    scene_pool: list[dict[str, Any]] = []
     return {
         "session_id": f"session-{uuid4()}",
         "mode": "exploration",
@@ -66,8 +67,10 @@ def create_initial_session_state() -> GameSessionState:
         "last_presented_choices": [],
         "recent_messages": [],
         "decision_history": [],
-        "scene_entity_pool": [],
+        "scene_pool": scene_pool,
+        "scene_entity_pool": scene_pool,
         "available_scene_entities": [],
+        "reference_pool": [],
         "output_language": "",
         "scene_pool_anchor": _create_scene_pool_anchor(player_state),
         "interruption_pressure": 0,
