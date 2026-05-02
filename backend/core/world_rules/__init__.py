@@ -1,2 +1,0 @@
-"""Structured world-definition module."""
-

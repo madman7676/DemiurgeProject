@@ -45,14 +45,16 @@ function renderEntityMarker(markerType, visibleText, markerIndex) {
   const [entityType, entitySubtype = ""] = markerType.split(":");
   const key = `narration-entity-${markerIndex}`;
 
-  if (markerType === "scene_entity:available") {
+  if (markerType === "scene_entity:available" || markerType.startsWith("entity:")) {
+    const pieces = visibleText.split("|");
+    const label = markerType.startsWith("entity:") ? pieces[1] || pieces[0] : visibleText;
     return (
       <strong
         key={key}
         data-entity-type={entityType}
         data-entity-subtype={entitySubtype}
       >
-        {visibleText}
+        {label}
       </strong>
     );
   }
@@ -67,6 +69,10 @@ function renderEntityMarker(markerType, visibleText, markerIndex) {
         {visibleText}
       </em>
     );
+  }
+
+  if (markerType === "player_change") {
+    return null;
   }
 
   return visibleText;

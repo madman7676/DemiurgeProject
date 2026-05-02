@@ -35,7 +35,7 @@ export function GameLayout() {
   async function handleSendMessage(message) {
     setError("");
     setIsSending(true);
-    setCurrentPipelineStep("router");
+    setCurrentPipelineStep("narrator");
     setMessages((currentMessages) => [
       ...currentMessages,
       { role: "player", text: message },
@@ -51,11 +51,6 @@ export function GameLayout() {
           setCurrentPipelineStep(step);
         },
         onPipelineUpdate: (update) => {
-          if (update.step === "entity_resolver" && update.user_message) {
-            setMessages((currentMessages) =>
-              patchLastPlayerMessage(currentMessages, update.user_message),
-            );
-          }
           if (update.step === "narrator" && update.narrative_text) {
             setMessages((currentMessages) =>
               patchLastAssistantMessage(currentMessages, update.narrative_text),
@@ -135,20 +130,6 @@ export function GameLayout() {
       </aside>
     </main>
   );
-}
-
-function patchLastPlayerMessage(messages, userMessage) {
-  const updatedMessages = [...messages];
-  for (let index = updatedMessages.length - 1; index >= 0; index -= 1) {
-    if (updatedMessages[index].role === "player") {
-      updatedMessages[index] = {
-        ...updatedMessages[index],
-        annotations: userMessage.annotations || [],
-      };
-      break;
-    }
-  }
-  return updatedMessages;
 }
 
 function patchLastAssistantMessage(messages, text) {

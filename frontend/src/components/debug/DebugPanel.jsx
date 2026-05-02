@@ -1,8 +1,8 @@
-// Hidden developer-facing panel for inspecting gameplay decision events.
+// Hidden developer-facing panel for inspecting the Lite turn debug event.
 export function DebugPanel({ decisionHistory }) {
   return (
     <details className="debug-panel">
-      <summary>Debug Decisions</summary>
+      <summary>Debug</summary>
       <div className="debug-panel-body">
         {decisionHistory.length === 0 ? (
           <p className="panel-note">No decision events recorded yet.</p>

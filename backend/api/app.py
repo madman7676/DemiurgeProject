@@ -1,7 +1,4 @@
-"""Minimal FastAPI app for the exploration prototype.
-
-Keep transport concerns here so gameplay modules remain framework-agnostic.
-"""
+"""FastAPI app for the Lite exploration backend."""
 
 from __future__ import annotations
 
@@ -18,21 +15,13 @@ from pydantic import BaseModel
 from backend.api.routes import (
     RouteContext,
     get_session_response,
+    process_lite_turn,
     process_message_response,
 )
 from backend.config import Settings, load_settings
-from backend.core.game_state.services.exploration_pipeline import ExplorationPipeline
-from backend.core.game_state.services.session_service import InMemorySessionStore
-from backend.modules.action_evaluation.services.action_evaluation_service import (
-    ActionEvaluationService,
-)
-from backend.modules.entity_resolver.services.entity_resolver_service import (
-    EntityResolverService,
-    LLMSemanticEntityMatcher,
-)
-from backend.modules.llm_connector.services.llm_client import OllamaLLMClient
-from backend.modules.narrator.services.narrator_service import NarratorService
-from backend.modules.router.services.router_service import RouterService
+from backend.core.state import InMemorySessionStore
+from backend.llm.client import OllamaLLMClient
+from backend.llm.narrator import Narrator
 
 
 class MessageRequest(BaseModel):
@@ -47,18 +36,9 @@ def create_route_context(settings: Settings) -> RouteContext:
 
     session_store = InMemorySessionStore()
     llm_adapter = OllamaLLMClient(settings)
-    exploration_pipeline = ExplorationPipeline(
-        session_store=session_store,
-        router_service=RouterService(llm_adapter=llm_adapter),
-        entity_resolver_service=EntityResolverService(
-            semantic_matcher=LLMSemanticEntityMatcher(llm_adapter),
-        ),
-        action_evaluation_service=ActionEvaluationService(llm_adapter=llm_adapter),
-        narrator_service=NarratorService(llm_adapter=llm_adapter),
-    )
     return RouteContext(
         session_store=session_store,
-        exploration_pipeline=exploration_pipeline,
+        narrator=Narrator(llm_adapter),
     )
 
 
@@ -93,7 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/message")
     def post_message(payload: MessageRequest) -> dict[str, Any]:
-        """Process a single player message through the exploration pipeline."""
+        """Process a single player message through the Lite pipeline."""
 
         request_payload = payload.model_dump(exclude_none=True)
         raw_message = request_payload["message"].strip()
@@ -126,7 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 def _stream_message_response(payload: dict[str, Any], context: RouteContext):
-    """Run the sync pipeline in a worker while yielding narrator chunks."""
+    """Run the sync Lite pipeline in a worker while yielding narrator chunks."""
 
     events: Queue[str | None] = Queue()
 
@@ -137,11 +117,18 @@ def _stream_message_response(payload: dict[str, Any], context: RouteContext):
         try:
             if "session_state" in payload and isinstance(payload["session_state"], dict):
                 context.session_store.replace_session(payload["session_state"])
-            pipeline_result = context.exploration_pipeline.process_player_message(
+            result = process_lite_turn(
                 str(payload.get("message", "")),
                 on_narration_chunk=lambda chunk: emit({"type": "narration_delta", "text": chunk}),
-                on_status=lambda step: emit({"type": "status", "step": step}),
-                on_pipeline_update=lambda update: emit({"type": "pipeline_update", **update}),
+                context=context,
+            )
+            emit(
+                {
+                    "type": "pipeline_update",
+                    "step": "lite",
+                    "turn": result["decision_cycle"]["turn"],
+                    "decision_events": result["decision_cycle"]["events"],
+                }
             )
             emit(
                 {
@@ -149,15 +136,7 @@ def _stream_message_response(payload: dict[str, Any], context: RouteContext):
                     "data": {
                         "session_id": context.session_store.get_session()["session_id"],
                         "output_language": context.session_store.get_session().get("output_language", ""),
-                        "route": pipeline_result["route"],
-                        "entity_resolution": pipeline_result["entity_resolution"],
-                        "result": pipeline_result["action_result"],
-                        "narrative_text": pipeline_result["narrative_text"],
-                        "visible_state": pipeline_result["visible_state"],
-                        "evolution_check": pipeline_result["evolution_check"],
-                        "recent_messages": pipeline_result["recent_messages"],
-                        "decision_cycle": pipeline_result["decision_cycle"],
-                        "decision_history": pipeline_result["decision_history"],
+                        **result,
                     },
                 }
             )

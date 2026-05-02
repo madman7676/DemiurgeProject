@@ -1,4 +1,4 @@
-"""Backend runtime configuration for the minimal exploration pipeline."""
+"""Backend runtime configuration for the Lite backend."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ class Settings:
     port: int
     llm_timeout_seconds: int
     allow_mock_fallback: bool
-    ollama_json_mode: bool
 
 
 def load_settings() -> Settings:
@@ -29,5 +28,4 @@ def load_settings() -> Settings:
         port=int(os.getenv("BACKEND_PORT", "8000")),
         llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_SECONDS", "240")),
         allow_mock_fallback=os.getenv("ALLOW_MOCK_LLM", "true").lower() != "false",
-        ollama_json_mode=os.getenv("OLLAMA_JSON_MODE", "true").lower() != "false",
     )

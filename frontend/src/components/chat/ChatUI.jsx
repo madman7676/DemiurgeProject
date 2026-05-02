@@ -3,11 +3,8 @@ import { renderAnnotatedText } from "../../utils/renderAnnotatedText";
 import { renderNarrationWithEntities } from "../../utils/renderNarrationWithEntities";
 
 const PIPELINE_STATUS_LABELS = {
-  router: "🧭 Роутер визначає намір...",
-  judge: "⚖️ Суддя оцінює дію...",
-  time: "⏳ Час рухається...",
-  consequence: "🔄 Світ реагує...",
-  narrator: "✍️ Формується відповідь...",
+  narrator: "Формується відповідь...",
+  lite: "Оновлюється стан...",
 };
 
 // Minimal chat surface for exploration-mode requests and responses.

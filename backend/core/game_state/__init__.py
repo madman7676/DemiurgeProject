@@ -1,2 +1,0 @@
-"""Overall session state module."""
-

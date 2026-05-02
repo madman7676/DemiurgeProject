@@ -1,2 +1,0 @@
-"""Pluggable gameplay systems module."""
-
