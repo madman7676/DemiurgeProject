@@ -81,6 +81,37 @@ class NarratorV1Tests(unittest.TestCase):
         self.assertEqual(context["result"]["summary"], "Attempt summary.")
         self.assertEqual(context["scene"]["location"], "market / crossroads")
 
+    def test_build_narration_context_exposes_known_scene_entities_for_tagging(self) -> None:
+        context = build_narration_context(
+            action_result={"attempt_summary": "Attempt summary."},
+            visible_state={
+                "player": {"current_location": {"region_id": "market"}},
+                "scene_pool": [
+                    {
+                        "entity_id": "scene:market:kiosk",
+                        "name": "кіоск",
+                        "normalized_name": "кіоск",
+                        "status": "available",
+                    }
+                ],
+            },
+            route_decision={"primary_intent": "inspect"},
+            output_language="uk",
+        )
+
+        self.assertEqual(
+            context["scene"]["known_scene_entities"],
+            [
+                {
+                    "entity_id": "scene:market:kiosk",
+                    "name": "кіоск",
+                    "normalized_name": "кіоск",
+                    "status": "available",
+                    "tag": "scene_entity:available",
+                }
+            ],
+        )
+
     def test_language_detection(self) -> None:
         self.assertEqual(detect_output_language("оглянутись"), "uk")
         self.assertEqual(detect_output_language("look around"), "en")

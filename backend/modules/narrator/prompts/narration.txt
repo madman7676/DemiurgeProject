@@ -40,6 +40,16 @@ Entity marking rules:
   [[reference:known_reference|...]]
   [[player_entity|...]]
 
+- The narration context may include scene.known_scene_entities.
+- Known scene entities are already remembered soft scene entities and remain taggable every time they are mentioned again.
+- Do not omit tags merely because an entity is already known.
+- If you mention a known scene entity, wrap the visible display text with its proper tag from known_scene_entities.tag:
+  [[scene_entity:available|display text]]
+  or
+  [[scene_entity:background|display text]]
+- Use the known entity status unless the structured result clearly makes a background entity immediately available.
+- Re-tagging known scene entities is expected; backend code will upsert and avoid duplicate scene memory records.
+
 - Mark only entities that are useful to expose to the player.
 - Do not mark every noun.
 - Do not mark abstract concepts, actions, emotions, directions, time, weather, or body parts unless they are clearly relevant entities.

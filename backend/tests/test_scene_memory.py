@@ -85,6 +85,30 @@ class SceneMemoryTests(unittest.TestCase):
         self.assertEqual(entry["mention_count"], 2)
         self.assertEqual(entry["last_seen_turn"], 2)
 
+    def test_repeated_available_mentions_reuse_existing_scene_entity_id(self) -> None:
+        first = "Поруч [[scene_entity:available|кіоск]]."
+        apply_narrator_scene_memory(
+            self.session_state,
+            first,
+            extract_narrator_mentions(first),
+            self.resolution,
+            current_turn=1,
+        )
+        entity_id = self.session_state["scene_entity_pool"][0]["entity_id"]
+        second = "Той самий [[scene_entity:available|кіоск]] лишається поруч."
+
+        apply_narrator_scene_memory(
+            self.session_state,
+            second,
+            extract_narrator_mentions(second),
+            self.resolution,
+            current_turn=2,
+        )
+
+        self.assertEqual(len(self.session_state["scene_entity_pool"]), 1)
+        self.assertEqual(self.session_state["scene_entity_pool"][0]["entity_id"], entity_id)
+        self.assertEqual(self.session_state["scene_entity_pool"][0]["mention_count"], 2)
+
     def test_reference_and_player_entity_do_not_enter_scene_pool(self) -> None:
         text = "[[reference:known_reference|старий храм]] і [[player_entity|Old Compass]]."
         debug = apply_narrator_scene_memory(

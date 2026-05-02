@@ -99,6 +99,7 @@ def build_visible_state(session_state: GameSessionState) -> VisibleGameState:
         "current_time": deepcopy(session_state["current_time"]),
         "player": deepcopy(session_state["player_state"]),
         "nearby_npcs": deepcopy(get_nearby_npcs(session_state)),
+        "scene_pool": deepcopy(session_state.get("scene_pool", session_state.get("scene_entity_pool", []))),
     }
 
 

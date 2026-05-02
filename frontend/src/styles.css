@@ -141,6 +141,58 @@ body {
   padding-left: 18px;
 }
 
+.curiosities-panel {
+  background: linear-gradient(180deg, #fffaf0 0%, #ffffff 100%);
+}
+
+.curiosities-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+  user-select: none;
+}
+
+.curiosities-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.curiosity-group h3 {
+  color: #52606d;
+  font-size: 0.9rem;
+  margin: 0 0 6px;
+}
+
+.curiosity-group-dimmed {
+  opacity: 0.68;
+}
+
+.curiosity-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.curiosity-list li {
+  border: 1px solid #e4e7eb;
+  border-radius: 10px;
+  padding: 9px 10px;
+}
+
+.curiosity-name {
+  display: block;
+  font-weight: 700;
+}
+
+.curiosity-meta {
+  color: #52606d;
+  display: block;
+  font-size: 0.82rem;
+  margin-top: 3px;
+}
+
 .debug-panel {
   border: 1px dashed #cbd2d9;
   border-radius: 12px;

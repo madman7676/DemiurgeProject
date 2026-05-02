@@ -128,6 +128,7 @@ def build_narration_context(
         "scene": {
             "location": _format_location(location),
             "description_hints": str(route_decision.get("primary_intent", "")),
+            "known_scene_entities": _known_scene_entities(visible_state),
         },
         "npc_reactions": _safe_list(action_result.get("npc_reactions", [])),
         "narration_notes": _safe_list(action_result.get("narration_notes", [])),
@@ -280,3 +281,30 @@ def _format_location(location: object) -> str:
         str(location.get("detail", "")).strip(),
     ]
     return " / ".join(part for part in parts if part)
+
+
+def _known_scene_entities(visible_state: dict[str, Any]) -> list[dict[str, str]]:
+    """Expose current scene-pool entities that Narrator may tag again."""
+
+    scene_pool = visible_state.get("scene_pool", [])
+    if not isinstance(scene_pool, list):
+        return []
+    entities: list[dict[str, str]] = []
+    for entry in scene_pool:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "")).strip()
+        normalized_name = str(entry.get("normalized_name", "")).strip()
+        status = str(entry.get("status", "available")).strip()
+        if not name or status not in {"available", "background"}:
+            continue
+        entities.append(
+            {
+                "entity_id": str(entry.get("entity_id", "")),
+                "name": name,
+                "normalized_name": normalized_name,
+                "status": status,
+                "tag": f"scene_entity:{status}",
+            }
+        )
+    return entities

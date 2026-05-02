@@ -314,6 +314,9 @@ class ExplorationPipeline:
         )
         emit_status("narrator")
         visible_state = build_visible_state(session_state)
+        visible_state["scene_pool"] = list(
+            session_state.get("scene_pool", session_state.get("scene_entity_pool", []))
+        )
         decision_events.append(
             {
                 "source": "narrator",

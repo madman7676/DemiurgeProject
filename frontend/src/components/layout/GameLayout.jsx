@@ -3,6 +3,7 @@ import { fetchSession, sendPlayerMessageStream } from "../../api/gameApi";
 import { ChatUI } from "../chat/ChatUI";
 import { DebugPanel } from "../debug/DebugPanel";
 import { InventoryPanel } from "../state_panels/InventoryPanel";
+import { LocalCuriositiesPanel } from "../state_panels/LocalCuriositiesPanel";
 import { SkillsPanel } from "../state_panels/SkillsPanel";
 import { StatsPanel } from "../state_panels/StatsPanel";
 import { TimePanel } from "../state_panels/TimePanel";
@@ -128,6 +129,7 @@ export function GameLayout() {
           currentTime={visibleState?.current_time}
           nearbyNpcs={visibleState?.nearby_npcs || []}
         />
+        <LocalCuriositiesPanel scenePool={visibleState?.scene_pool || []} />
         <DebugPanel decisionHistory={decisionHistory} />
       </aside>
     </main>
