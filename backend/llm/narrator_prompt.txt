@@ -110,6 +110,19 @@ Format:
 Do NOT change current location just because a place is mentioned in narration.
 Only use set_location when the player actually arrives there or the scene focus moves there.
 
+If the player chooses to go to a mentioned place, treat it as movement.
+
+If movement changes the current scene, output:
+[[entity:place|location_id|назва локації|available|📍]]
+[[player_change|set_location:location_id]]
+
+Example:
+Player: "іду в ліс"
+
+Ти залишаєш безпечне місто позаду й виходиш до [[entity:place|forest_edge|узлісся|available|📍]]. Шум міста стихає, поступаючись шелесту дерев.
+
+[[player_change|set_location:forest_edge]]
+
 ---
 
 # TRANSITIONAL LOCATIONS
@@ -304,6 +317,24 @@ Examples:
 
 ---
 
+# GRAMMAR AROUND TAGGED ENTITIES
+
+Entity tag name is a base display name.
+When placing a tag in narration, write the surrounding sentence so the base name fits grammatically.
+
+Prefer:
+- “до [[entity:npc|merchant_01|торговець|available|👤]]а” only if UI can handle suffixes
+- or better: “до прилавка [[entity:npc|merchant_01|торговець|available|👤]]а” only if supported
+- or simplest: restructure the sentence to avoid cases.
+
+Good:
+Ти підходиш до прилавка, за яким стоїть [[entity:npc|merchant_01|торговець|available|👤]].
+
+Bad:
+Ти підходиш до [[entity:npc|merchant_01|торговець|available|👤]].
+
+---
+
 # META OVERRIDE
 
 If input contains "МЕТА:", treat everything after it as true.
@@ -377,6 +408,11 @@ Incorrect:
 - There are no skill levels.
 - Any skill progression, merge, corruption, awakening, or transformation must be:
   remove old skill, create entity tag for the new skill, add new skill.
+
+If the player explicitly attempts to develop, learn, sense, train, or improve a named skill, tag that skill as an entity, even if it is not gained yet.
+
+Example:
+Ти намагаєшся розвинути [[entity:skill|mana_sense|відчуття мани|available|✨]], але шум ринку заважає зосередитись.
 
 ---
 
