@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { renderAnnotatedText } from "../../utils/renderAnnotatedText";
 import { renderNarrationWithEntities } from "../../utils/renderNarrationWithEntities";
 
 const PIPELINE_STATUS_LABELS = {
@@ -7,7 +6,7 @@ const PIPELINE_STATUS_LABELS = {
   lite: "Оновлюється стан...",
 };
 
-// Minimal chat surface for exploration-mode requests and responses.
+// Minimal chat surface for Lite exploration requests and responses.
 export function ChatUI({
   messages,
   onSendMessage,
@@ -32,12 +31,12 @@ export function ChatUI({
   return (
     <div className="chat-window">
       <h1>DemiurgeProject</h1>
-      <p className="chat-subtitle">Exploration mode prototype</p>
+      <p className="chat-subtitle">Lite tag-driven exploration</p>
 
       <div className="message-list">
         {messages.length === 0 ? (
           <p className="empty-state">
-            Send a message to process the first exploration turn.
+            Send a message to process the first Lite turn.
           </p>
         ) : (
           messages.map((message, index) => (
@@ -79,7 +78,7 @@ export function ChatUI({
 
 function renderMessageBody({ message, isPendingAssistant, currentPipelineStep }) {
   if (message.role === "player") {
-    return <p>{renderAnnotatedText(message.text, message.annotations || [])}</p>;
+    return <p>{message.text}</p>;
   }
 
   if (isPendingAssistant) {
@@ -92,25 +91,5 @@ function renderMessageBody({ message, isPendingAssistant, currentPipelineStep })
     );
   }
 
-  return (
-    <>
-      <p>{renderNarrationWithEntities(message.text)}</p>
-      {renderChangeSummary(message.change_summary || [])}
-    </>
-  );
-}
-
-function renderChangeSummary(changeSummary) {
-  if (!changeSummary.length) {
-    return null;
-  }
-  return (
-    <ul className="change-summary">
-      {changeSummary.map((change, index) => (
-        <li key={`${change.kind || "change"}-${index}`}>
-          {change.text}
-        </li>
-      ))}
-    </ul>
-  );
+  return <p>{renderNarrationWithEntities(message.text)}</p>;
 }

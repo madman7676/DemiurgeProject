@@ -1,34 +1,32 @@
-// Hidden developer-facing panel for inspecting the Lite turn debug event.
-export function DebugPanel({ decisionHistory }) {
+// Hidden developer-facing panel for the latest Lite debug payload.
+export function DebugPanel({ debug }) {
   return (
     <details className="debug-panel">
       <summary>Debug</summary>
       <div className="debug-panel-body">
-        {decisionHistory.length === 0 ? (
-          <p className="panel-note">No decision events recorded yet.</p>
+        {!debug ? (
+          <p className="panel-note">No debug payload yet.</p>
         ) : (
-          decisionHistory.map((cycle) => (
-            <section key={`debug-cycle-${cycle.turn}`} className="debug-cycle">
-              <h3>Turn {cycle.turn}</h3>
-              <p className="debug-input">{cycle.raw_player_input}</p>
-              <div className="debug-event-list">
-                {cycle.events.map((event, index) => (
-                  <article
-                    key={`debug-event-${cycle.turn}-${index}`}
-                    className="debug-event"
-                  >
-                    <strong>{event.source}</strong>
-                    <p>{event.message}</p>
-                    {event.details && Object.keys(event.details).length > 0 ? (
-                      <pre>{JSON.stringify(event.details, null, 2)}</pre>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))
+          <>
+            <DebugBlock title="Raw LLM Response" value={debug.raw_llm_response || ""} />
+            <DebugBlock title="Parsed Tags" value={debug.parsed_tags || {}} />
+            <DebugBlock title="Applied Changes" value={debug.applied_changes || []} />
+            <DebugBlock
+              title="Malformed / Skipped Tags"
+              value={debug.malformed_or_skipped_tags || []}
+            />
+          </>
         )}
       </div>
     </details>
+  );
+}
+
+function DebugBlock({ title, value }) {
+  return (
+    <section className="debug-event">
+      <strong>{title}</strong>
+      <pre>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</pre>
+    </section>
   );
 }

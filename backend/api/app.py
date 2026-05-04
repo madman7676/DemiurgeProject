@@ -126,15 +126,13 @@ def _stream_message_response(payload: dict[str, Any], context: RouteContext):
                 {
                     "type": "pipeline_update",
                     "step": "lite",
-                    "turn": result["decision_cycle"]["turn"],
-                    "decision_events": result["decision_cycle"]["events"],
+                    "debug": result["debug"],
                 }
             )
             emit(
                 {
                     "type": "final",
                     "data": {
-                        "session_id": context.session_store.get_session()["session_id"],
                         "output_language": context.session_store.get_session().get("output_language", ""),
                         **result,
                     },

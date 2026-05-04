@@ -2,100 +2,79 @@
 
 Minimal web text adventure powered by a local Ollama LLM.
 
-The backend is now a Lite exploration loop:
+The backend is a tag-driven Lite loop:
 
 ```text
 User input
--> Narrator LLM
+-> Narrator/GM LLM
 -> parse [[...]] tags
--> apply player state changes in code
--> update scene memory in code
--> return narrative and visible state
+-> update GameState
+-> save bounded history
+-> update UI
 ```
 
-The old multi-agent systems are removed from runtime.
+The old multi-agent runtime is removed.
 
-## Structure
+## Backend Structure
 
 ```text
-DemiurgeProject/
-  frontend/
-    src/
-      api/
-      components/
-      utils/
-  backend/
-    main.py
-    config.py
-    api/
-      app.py
-      routes.py
-    core/
-      state.py
-      scene_memory.py
-      tag_parser.py
-    llm/
-      client.py
-      narrator.py
-    tests/
-      test_lite_pipeline.py
+backend/
+  main.py
+  config.py
+  api/
+    app.py
+    routes.py
+  core/
+    state.py
+    tag_parser.py
+  llm/
+    client.py
+    narrator.py
+    narrator_prompt.txt
+  tests/
+    test_lite_pipeline.py
 ```
 
-## Backend Pieces
-
-`backend/llm/client.py`
-: Small Ollama client.
-
-`backend/llm/narrator.py`
-: The single Narrator/GM prompt and call site.
-
-`backend/core/tag_parser.py`
-: Extracts `[[...]]` blocks and recognizes `entity:*` and `player_change` tags.
-
-`backend/core/scene_memory.py`
-: Stores tagged scene entities in `scene_pool`.
-
-`backend/core/state.py`
-: Holds in-memory session state, player inventory, gold, skills, visible state, and chat history.
-
-`backend/api/routes.py`
-: Runs the direct Lite turn and applies parsed tag changes.
-
-## Supported Tags
-
-Examples:
+## GameState Shape
 
 ```text
-[[entity:item|rusty_knife_01|rusty knife|available]]
-[[entity:npc|market_guard_01|market guard|available]]
+scene:
+  location: { id, name, icon }
+  entities: [{ id, class, name, visibility, icon, last_seen_turn }]
+  last_response
+player:
+  inventory: [{ id, name, icon }]
+  currencies: [{ id, name, icon, amount }]
+  skills: [{ id, name, icon }]
+history:
+  [{ user_input, narrator_response_clean, parsed_entities, applied_changes }]
+debug:
+  raw_llm_response
+  parsed_tags
+  applied_changes
+  malformed_or_skipped_tags
+```
+
+## Tags
+
+```text
+[[entity:item|rusty_knife_01|rusty knife|available|K]]
+[[entity:currency|gold|золото|available|G]]
+[[entity:place|market_lane|ринковий провулок|available|P]]
+
 [[player_change|add_item:rusty_knife_01]]
-[[player_change|add_gold:10]]
+[[player_change|add_currency:gold:10]]
+[[player_change|set_location:market_lane]]
 ```
 
-The backend intentionally does not validate whether tags are correct. It applies them directly.
+Entity tags from the latest response replace the current visible scene entities.
+Location changes only through `set_location`.
 
 ## Local Setup
 
-Install backend dependencies:
-
 ```powershell
 pip install -r backend/requirements.txt
-```
-
-Start the backend:
-
-```powershell
 python -m backend.main
-```
-
-Install and start the frontend:
-
-```powershell
 npm install --prefix frontend
 npm run dev --prefix frontend
 ```
-
-Ollama defaults live in `backend/config.py`:
-
-- `MODEL="gemma3:12b"`
-- `LLM_URL="http://localhost:11434/api/generate"`

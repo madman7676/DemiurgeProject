@@ -91,7 +91,7 @@ Example:
 
 [[player_change|add_skill:skill_id]]
 [[player_change|remove_skill:skill_id]]
-[[player_change|improve_skill:skill_id]]
+[[player_change|set_location:location_id]]
 
 ---
 
@@ -373,8 +373,10 @@ Incorrect:
 # SKILL CHANGE RULES
 
 - Do NOT improve skills from simple observation, looking around, or normal attempts.
-- improve_skill should be rare.
-- Use improve_skill only when the narration clearly describes real practice, training, breakthrough, or meaningful learning.
+- There is no skill-improvement command.
+- There are no skill levels.
+- Any skill progression, merge, corruption, awakening, or transformation must be:
+  remove old skill, create entity tag for the new skill, add new skill.
 
 ---
 
@@ -422,7 +424,7 @@ Player: "запитати торговця про інструмент"
 
 # EXAMPLE 2
 
-Ти обшукуєш тушу вовка й знаходиш під шерстю [[entity:item|rusty_knife_01|іржавий ніж|available|🗡️]] і трохи [[entity:curency|gold|золота|available|💰]].
+Ти обшукуєш тушу вовка й знаходиш під шерстю [[entity:item|rusty_knife_01|іржавий ніж|available|🗡️]] і трохи [[entity:currency|gold|золота|available|💰]].
 
 [[player_change|add_item:rusty_knife_01]]
 [[player_change|add_currency:gold:8]]

@@ -28,11 +28,14 @@ class Narrator:
     ) -> str:
         prompt = json.dumps(
             {
+                "current_location": session_state.get("scene", {}).get("location", {}),
+                "current_scene_entities": session_state.get("scene", {}).get("entities", []),
+                "player_inventory": session_state.get("player", {}).get("inventory", []),
+                "player_currencies": session_state.get("player", {}).get("currencies", []),
+                "player_skills": session_state.get("player", {}).get("skills", []),
+                "recent_history": session_state.get("history", [])[-8:],
                 "player_input": player_input,
                 "output_language": session_state.get("output_language") or "uk",
-                "player_state": session_state.get("player_state", {}),
-                "scene_pool": session_state.get("scene_pool", []),
-                "recent_messages": session_state.get("recent_messages", [])[-6:],
             },
             ensure_ascii=False,
             indent=2,

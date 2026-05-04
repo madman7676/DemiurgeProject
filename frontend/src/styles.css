@@ -154,6 +154,45 @@ body {
   padding-left: 18px;
 }
 
+.icon-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding-left: 0;
+}
+
+.icon-list li,
+.location-line {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+.item-icon {
+  display: inline-block;
+  min-width: 1.4em;
+  text-align: center;
+}
+
+.currency-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.currency-list li {
+  align-items: center;
+  border: 1px solid #e4e7eb;
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px 10px;
+}
+
 .curiosities-panel {
   background: linear-gradient(180deg, #fffaf0 0%, #ffffff 100%);
 }
@@ -195,7 +234,9 @@ body {
 }
 
 .curiosity-name {
-  display: block;
+  align-items: center;
+  display: flex;
+  gap: 8px;
   font-weight: 700;
 }
 
@@ -268,6 +309,18 @@ body {
   overflow-x: auto;
   font-size: 0.8rem;
   color: #364152;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.history-list p {
+  color: #52606d;
+  margin: 4px 0 0;
 }
 
 @media (max-width: 900px) {

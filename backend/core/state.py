@@ -1,152 +1,124 @@
-"""Small in-memory state store for the Lite backend."""
+"""In-memory GameState for the tag-driven Lite backend."""
 
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
-from uuid import uuid4
 
 
-def create_initial_player_state() -> dict[str, Any]:
-    """Return the default player state for local development."""
+HISTORY_LIMIT = 20
+DEFAULT_ICON = {
+    "item": "•",
+    "npc": "☻",
+    "enemy": "!",
+    "place": "⌂",
+    "skill": "*",
+    "currency": "$",
+}
 
+
+def create_initial_game_state() -> dict[str, Any]:
     return {
-        "identity": {
-            "player_id": "player_dynamic_001",
-            "name": "Riven Ash",
+        "scene": {
+            "location": {
+                "id": "stonemarket",
+                "name": "Crowded market crossroads",
+                "icon": "⌂",
+            },
+            "entities": [],
+            "last_response": "",
         },
-        "race": "Human",
-        "player_class": "Wanderer",
-        "background": "A former caravan scout trying to rebuild a life after losing their trade route.",
-        "stats": [
-            {"stat_id": "resolve", "name": "Resolve", "value": 4},
-            {"stat_id": "agility", "name": "Agility", "value": 3},
-        ],
-        "skills": [
-            {
-                "skill_id": "negotiation",
-                "name": "Negotiation",
-                "level": 1,
-                "aliases": ["haggle", "bargain"],
-            },
-            {
-                "skill_id": "awareness",
-                "name": "Awareness",
-                "level": 2,
-                "aliases": ["notice", "observe"],
-            },
-            {
-                "skill_id": "save_spot",
-                "name": "Save Spot",
-                "level": 1,
-                "type": "active",
-                "aliases": ["safe blink", "escape point", "secure step"],
-                "description": "Instantly teleports the player to the nearest safe location within range.",
-            },
-        ],
-        "inventory": [
-            {
-                "item_id": "old_compass",
-                "name": "Old Compass",
-                "quantity": 1,
-                "aliases": ["compass"],
-            },
-            {
-                "item_id": "travel_cloak",
-                "name": "Travel Cloak",
-                "quantity": 1,
-                "aliases": ["cloak"],
-            },
-        ],
-        "equipped_items": [
-            {
-                "item_id": "travel_cloak",
-                "name": "Travel Cloak",
-                "quantity": 1,
-                "aliases": ["cloak"],
-            }
-        ],
-        "held_items": [
-            {
-                "item_id": "old_compass",
-                "name": "Old Compass",
-                "quantity": 1,
-                "aliases": ["compass"],
-            }
-        ],
-        "currencies": [
-            {
-                "currency_id": "coin",
-                "name": "Coin",
-                "amount": 7,
-                "aliases": ["coins", "gold"],
-            }
-        ],
-        "status_effects": [],
-        "current_location": {
-            "region_id": "stonemarket",
-            "detail": "Crowded market crossroads",
+        "player": {
+            "inventory": [
+                {"id": "old_compass", "name": "Old Compass", "icon": "◌"},
+                {"id": "travel_cloak", "name": "Travel Cloak", "icon": "▧"},
+            ],
+            "currencies": [
+                {"id": "coin", "name": "Coin", "icon": "$", "amount": 7},
+            ],
+            "skills": [
+                {"id": "negotiation", "name": "Negotiation", "icon": "◇"},
+                {"id": "awareness", "name": "Awareness", "icon": "◈"},
+                {"id": "save_spot", "name": "Save Spot", "icon": "*"},
+            ],
         },
-        "party_links": [],
-    }
-
-
-def create_initial_session_state() -> dict[str, Any]:
-    player_state = create_initial_player_state()
-    return {
-        "session_id": f"session-{uuid4()}",
-        "mode": "exploration",
-        "player_state": player_state,
-        "current_time": {"year": 1, "month": 1, "day": 1, "hour": 8, "minute": 0},
-        "scene_pool": [],
-        "recent_messages": [],
-        "decision_history": [],
-        "output_language": "",
+        "history": [],
+        "debug": {
+            "raw_llm_response": "",
+            "parsed_tags": {"entities": [], "player_changes": []},
+            "applied_changes": [],
+            "malformed_or_skipped_tags": [],
+        },
         "turn_count": 0,
+        "output_language": "",
     }
 
 
 class InMemorySessionStore:
-    """Single-session store used by the local prototype."""
+    """Single GameState store used by the local prototype."""
 
     def __init__(self) -> None:
-        self._session_state = create_initial_session_state()
+        self._game_state = create_initial_game_state()
 
     def get_session(self) -> dict[str, Any]:
-        return self._session_state
+        return self._game_state
 
-    def replace_session(self, session_state: dict[str, Any]) -> None:
-        self._session_state = deepcopy(session_state)
-        self._session_state.setdefault("scene_pool", [])
-        self._session_state.setdefault("recent_messages", [])
-        self._session_state.setdefault("decision_history", [])
-        self._session_state.setdefault("turn_count", 0)
+    def replace_session(self, state: dict[str, Any]) -> None:
+        self._game_state = normalize_game_state(state)
 
 
-def build_visible_state(session_state: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "mode": session_state.get("mode", "exploration"),
-        "current_time": deepcopy(session_state.get("current_time", {})),
-        "player": deepcopy(session_state.get("player_state", {})),
-        "nearby_npcs": [
-            deepcopy(entity)
-            for entity in session_state.get("scene_pool", [])
-            if entity.get("entity_type") == "actor" or entity.get("kind") == "npc"
-        ],
-        "scene_pool": deepcopy(session_state.get("scene_pool", [])),
-    }
+def normalize_game_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Accept client snapshots while keeping the Lite shape intact."""
+
+    normalized = deepcopy(state) if isinstance(state, dict) else {}
+    normalized.setdefault("scene", {})
+    normalized["scene"].setdefault("location", {"id": "unknown", "name": "unknown", "icon": "⌂"})
+    normalized["scene"].setdefault("entities", [])
+    normalized["scene"].setdefault("last_response", "")
+    normalized.setdefault("player", {})
+    normalized["player"].setdefault("inventory", [])
+    normalized["player"].setdefault("currencies", [])
+    normalized["player"].setdefault("skills", [])
+    normalized.setdefault("history", [])
+    normalized.setdefault("debug", {})
+    normalized["debug"].setdefault("raw_llm_response", "")
+    normalized["debug"].setdefault("parsed_tags", {"entities": [], "player_changes": []})
+    normalized["debug"].setdefault("applied_changes", [])
+    normalized["debug"].setdefault("malformed_or_skipped_tags", [])
+    normalized.setdefault("turn_count", 0)
+    normalized.setdefault("output_language", "")
+    return normalized
 
 
-def append_message(
-    session_state: dict[str, Any],
-    role: str,
-    text: str,
-    change_summary: list[dict[str, str]] | None = None,
+def build_visible_state(game_state: dict[str, Any]) -> dict[str, Any]:
+    return deepcopy(game_state)
+
+
+def append_history_turn(
+    game_state: dict[str, Any],
+    user_input: str,
+    narrator_response_clean: str,
+    parsed_entities: list[dict[str, Any]],
+    applied_changes: list[dict[str, Any]],
 ) -> None:
-    message: dict[str, Any] = {"role": role, "text": text}
-    if change_summary:
-        message["change_summary"] = deepcopy(change_summary)
-    session_state.setdefault("recent_messages", []).append(message)
+    history = game_state.setdefault("history", [])
+    history.append(
+        {
+            "user_input": user_input,
+            "narrator_response_clean": narrator_response_clean,
+            "parsed_entities": deepcopy(parsed_entities),
+            "applied_changes": deepcopy(applied_changes),
+        }
+    )
+    del history[:-HISTORY_LIMIT]
+
+
+def build_messages(game_state: dict[str, Any]) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
+    for turn in game_state.get("history", []):
+        messages.append({"role": "player", "text": str(turn.get("user_input", ""))})
+        messages.append({"role": "assistant", "text": str(turn.get("narrator_response_clean", ""))})
+    return messages
 
 
 def detect_output_language(raw_input: str, fallback: str = "uk") -> str:
@@ -162,3 +134,36 @@ def detect_output_language(raw_input: str, fallback: str = "uk") -> str:
     if latin_count > cyrillic_count:
         return "en"
     return fallback
+
+
+def entity_to_inventory_item(entity: dict[str, Any], fallback_id: str) -> dict[str, str]:
+    return {
+        "id": str(entity.get("id") or fallback_id),
+        "name": str(entity.get("name") or fallback_id),
+        "icon": str(entity.get("icon") or DEFAULT_ICON["item"]),
+    }
+
+
+def entity_to_skill(entity: dict[str, Any], fallback_id: str) -> dict[str, str]:
+    return {
+        "id": str(entity.get("id") or fallback_id),
+        "name": str(entity.get("name") or fallback_id),
+        "icon": str(entity.get("icon") or DEFAULT_ICON["skill"]),
+    }
+
+
+def entity_to_currency(entity: dict[str, Any], amount: int = 0) -> dict[str, Any]:
+    return {
+        "id": str(entity["id"]),
+        "name": str(entity.get("name") or entity["id"]),
+        "icon": str(entity.get("icon") or DEFAULT_ICON["currency"]),
+        "amount": amount,
+    }
+
+
+def entity_to_location(entity: dict[str, Any], fallback_id: str) -> dict[str, str]:
+    return {
+        "id": str(entity.get("id") or fallback_id),
+        "name": str(entity.get("name") or fallback_id),
+        "icon": str(entity.get("icon") or DEFAULT_ICON["place"]),
+    }
