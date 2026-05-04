@@ -95,5 +95,16 @@ def strip_tags(text: str) -> str:
     return re.sub(r"\s+([.,!?;:])", r"\1", cleaned)
 
 
+def strip_player_change_tags(text: str) -> str:
+    """Remove backend mutation tags while preserving entity tags for UI rendering."""
+
+    def replace_tag(match: re.Match[str]) -> str:
+        raw = match.group(1).strip()
+        return "" if raw.startswith("player_change|") else match.group(0)
+
+    cleaned = re.sub(r"\s+", " ", TAG_PATTERN.sub(replace_tag, text or "")).strip()
+    return re.sub(r"\s+([.,!?;:])", r"\1", cleaned)
+
+
 def _skip(parsed: dict[str, list[dict[str, Any]]], raw: str, reason: str) -> None:
     parsed["malformed_or_skipped_tags"].append({"raw": raw, "reason": reason})

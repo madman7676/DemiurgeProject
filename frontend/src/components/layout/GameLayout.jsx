@@ -40,7 +40,13 @@ export function GameLayout() {
     setIsSending(true);
     setCurrentPipelineStep("narrator");
     setMessages((currentMessages) => [
-      ...currentMessages,
+      ...currentMessages.map((message) => {
+        if (message.role !== "assistant" || !message.change_summary) {
+          return message;
+        }
+        const { change_summary, ...rest } = message;
+        return rest;
+      }),
       { role: "player", text: message },
       { role: "assistant", text: "" },
     ]);

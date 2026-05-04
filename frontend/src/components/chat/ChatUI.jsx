@@ -91,5 +91,23 @@ function renderMessageBody({ message, isPendingAssistant, currentPipelineStep })
     );
   }
 
-  return <p>{renderNarrationWithEntities(message.text)}</p>;
+  return (
+    <>
+      <p>{renderNarrationWithEntities(message.text)}</p>
+      {renderChangeSummary(message.change_summary || [])}
+    </>
+  );
+}
+
+function renderChangeSummary(changeSummary) {
+  if (!changeSummary.length) {
+    return null;
+  }
+  return (
+    <ul className="change-summary">
+      {changeSummary.map((change, index) => (
+        <li key={`${change.kind || "change"}-${index}`}>{change.text}</li>
+      ))}
+    </ul>
+  );
 }
