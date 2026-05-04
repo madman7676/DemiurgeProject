@@ -4,34 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+from pathlib import Path
 from typing import Any
 
 from backend.llm.client import LLMAdapter
 
 
-SYSTEM_PROMPT = """You are the single Narrator/GM for a lightweight text adventure.
-
-Write a short response to the player in the requested output language.
-You control only narration. Player state is changed by code through tags.
-
-Use tags when something should enter scene memory or update player state:
-[[entity:item|item_id|visible name|available]]
-[[entity:npc|npc_id|visible name|available]]
-[[entity:place|place_id|visible name|background]]
-[[player_change|add_item:item_id]]
-[[player_change|add_gold:10]]
-[[player_change|remove_item:item_id]]
-[[player_change|add_skill:skill_id]]
-
-Rules:
-- Return plain text with tags inline.
-- Keep it direct and playable.
-- Do not output JSON.
-- Do not mention backend systems.
-- Do not validate player actions in a separate system voice.
-- If you add an item, include both an entity tag for it and a player_change tag.
-- If you mention an interactable scene thing, include an entity tag for it.
-"""
+PROMPT_PATH = Path(__file__).with_name("narrator_prompt.txt")
 
 
 class Narrator:
@@ -39,6 +18,7 @@ class Narrator:
 
     def __init__(self, llm_adapter: LLMAdapter) -> None:
         self._llm_adapter = llm_adapter
+        self._system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
 
     def narrate(
         self,
@@ -60,12 +40,12 @@ class Narrator:
 
         if on_token is not None:
             chunks: list[str] = []
-            for chunk in self._llm_adapter.stream_text(SYSTEM_PROMPT, prompt):
+            for chunk in self._llm_adapter.stream_text(self._system_prompt, prompt):
                 chunks.append(chunk)
                 on_token(chunk)
             text = "".join(chunks).strip()
         else:
-            response = self._llm_adapter.generate_text(SYSTEM_PROMPT, prompt)
+            response = self._llm_adapter.generate_text(self._system_prompt, prompt)
             text = str(response.get("text", "")).strip()
 
         if text:
