@@ -71,7 +71,7 @@ function renderEntityMarker(markerType, visibleText, markerIndex) {
     );
   }
 
-  if (markerType === "player_change") {
+  if (markerType === "player_change" || markerType === "scene_change") {
     return null;
   }
 

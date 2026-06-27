@@ -102,24 +102,32 @@ def process_lite_turn(
         game_state,
         applied_changes,
     )
-    malformed_or_skipped = parsed_tags["malformed_or_skipped_tags"] + skipped_changes
+    applied_scene_changes, skipped_scene_changes = apply_scene_changes(
+        game_state=game_state,
+        scene_change_tags=parsed_tags["scene_changes"],
+    )
+    all_applied_changes = applied_changes + applied_scene_changes
+    malformed_or_skipped = parsed_tags["malformed_or_skipped_tags"] + skipped_changes + skipped_scene_changes
     narrator_response_for_ui = strip_player_change_tags(raw_llm_response)
     narrator_response_clean = strip_tags(raw_llm_response)
-    latest_change_summary = build_change_summary(applied_changes)
+    latest_change_summary = build_change_summary(all_applied_changes)
 
     game_state["debug"] = {
         "raw_llm_response": raw_llm_response,
         "narrator_response_for_ui": narrator_response_for_ui,
+        "llm_diagnostics": dict(getattr(context.narrator, "last_diagnostics", {}) or {}),
         "parsed_tags": {
             "entities": parsed_entities,
             "player_changes": parsed_tags["player_changes"],
+            "scene_changes": parsed_tags["scene_changes"],
         },
-        "applied_changes": applied_changes,
+        "applied_changes": all_applied_changes,
         "malformed_or_skipped_tags": malformed_or_skipped,
         "location_changed": location_changed,
         "scene_entities_added": scene_added,
         "scene_entities_updated": scene_updated,
         "scene_entities_removed_due_to_player_change": removed_due_to_player_change,
+        "scene_changes_applied": applied_scene_changes,
         "scene_entities_cleared_due_to_location_change": cleared_entities,
     }
     game_state["latest_change_summary"] = latest_change_summary
@@ -129,7 +137,7 @@ def process_lite_turn(
         narrator_response_for_ui=narrator_response_for_ui,
         narrator_response_clean=narrator_response_clean,
         parsed_entities=parsed_entities,
-        applied_changes=applied_changes,
+        applied_changes=all_applied_changes,
     )
 
     return {
@@ -231,7 +239,44 @@ def build_change_summary(applied_changes: list[dict[str, Any]]) -> list[dict[str
             summary.append({"kind": action, "text": f"Втрачено навичку: {name}"})
         elif action == "set_location":
             summary.append({"kind": action, "text": f"Локація: {name}"})
+        elif action == "remove_entity":
+            summary.append({"kind": action, "text": f"Зникло: {name}"})
     return summary
+
+
+def apply_scene_changes(
+    game_state: dict[str, Any],
+    scene_change_tags: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Apply known scene_change tags to scene entities only."""
+
+    applied: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    scene_entities = game_state.setdefault("scene", {}).setdefault("entities", [])
+
+    for tag in scene_change_tags:
+        command = str(tag.get("command", ""))
+        args = list(tag.get("args", []))
+
+        if command == "remove_entity":
+            if len(args) != 1:
+                skipped.append(_invalid(tag, "wrong_argument_count"))
+                continue
+            entity_id = str(args[0])
+            existing = _find_by_id(scene_entities, entity_id)
+            name = existing.get("name", entity_id) if existing is not None else entity_id
+            scene_entities[:] = [entity for entity in scene_entities if entity.get("id") != entity_id]
+            applied.append(
+                {
+                    "source": "scene_change",
+                    "action": "remove_entity",
+                    "id": entity_id,
+                    "name": str(name),
+                    "removed": existing is not None,
+                }
+            )
+
+    return applied, skipped
 
 
 def apply_player_changes(

@@ -242,6 +242,35 @@ For any transformation (items or skills):
 
 ---
 
+# SCENE CHANGES
+
+Use scene_change tags when an existing scene entity is removed, destroyed, consumed, broken, transformed, or otherwise stops existing in its old form.
+
+Format:
+
+[[scene_change|remove_entity:entity_id]]
+
+Rules:
+
+- If a scene object breaks, burns, disappears, is destroyed, is consumed, or is no longer present, remove the old entity.
+- If it becomes something else, remove the old entity and create a new entity tag for the new form.
+- Do not leave the old entity in the scene if narration says it stopped existing in that form.
+- Place scene_change tags at the end of the response, together with player_change tags.
+
+Examples:
+
+A ceramic object breaks:
+Ти піднімаєш кераміку, але вона тріскає в руках і розсипається на [[entity:item|ceramic_shards_01|керамічні уламки|available|🏺]].
+
+[[scene_change|remove_entity:ceramic_01]]
+
+A torch burns out:
+Смолоскип догорає, залишаючи після себе [[entity:item|burnt_torch_01|обгорілий смолоскип|available|🪵]].
+
+[[scene_change|remove_entity:torch_01]]
+
+---
+
 # TAG RULES
 
 * If the player gains something → include player_change.
@@ -279,12 +308,12 @@ Do NOT tag:
 - background navigation options
 
 Prefer:
-- 1–3 meaningful entities over listing everything
+- meaningful entities over listing everything
 
 Examples:
 
-✔ торговець, прохач
-✘ північна дорога, східна дорога, західна дорога, південна дорога
+✔ торговець, могила, секретар гільдії, кільце
+✘ північна дорога, східна дорога, камінь, трава
 
 - Do NOT enumerate similar entities just to be complete.
 - Focus on what the player can meaningfully interact with next.

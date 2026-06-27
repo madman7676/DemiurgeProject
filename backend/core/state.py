@@ -46,7 +46,8 @@ def create_initial_game_state() -> dict[str, Any]:
         "debug": {
             "raw_llm_response": "",
             "narrator_response_for_ui": "",
-            "parsed_tags": {"entities": [], "player_changes": []},
+            "llm_diagnostics": {},
+            "parsed_tags": {"entities": [], "player_changes": [], "scene_changes": []},
             "applied_changes": [],
             "malformed_or_skipped_tags": [],
         },
@@ -85,7 +86,9 @@ def normalize_game_state(state: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("debug", {})
     normalized["debug"].setdefault("raw_llm_response", "")
     normalized["debug"].setdefault("narrator_response_for_ui", "")
-    normalized["debug"].setdefault("parsed_tags", {"entities": [], "player_changes": []})
+    normalized["debug"].setdefault("llm_diagnostics", {})
+    normalized["debug"].setdefault("parsed_tags", {"entities": [], "player_changes": [], "scene_changes": []})
+    normalized["debug"]["parsed_tags"].setdefault("scene_changes", [])
     normalized["debug"].setdefault("applied_changes", [])
     normalized["debug"].setdefault("malformed_or_skipped_tags", [])
     normalized.setdefault("latest_change_summary", [])

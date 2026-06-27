@@ -17,6 +17,7 @@ def parse_tags(text: str) -> dict[str, list[dict[str, Any]]]:
     parsed: dict[str, list[dict[str, Any]]] = {
         "entities": [],
         "player_changes": [],
+        "scene_changes": [],
         "malformed_or_skipped_tags": [],
     }
 
@@ -85,6 +86,25 @@ def parse_tags(text: str) -> dict[str, list[dict[str, Any]]]:
             )
             continue
 
+        if kind == "scene_change":
+            if len(parts) != 2 or not parts[1]:
+                _skip(parsed, raw, "malformed_scene_change")
+                continue
+            command_parts = [part.strip() for part in parts[1].split(":")]
+            command = command_parts[0] if command_parts else ""
+            if command not in {"remove_entity"}:
+                _skip(parsed, raw, "unknown_scene_change")
+                continue
+            parsed["scene_changes"].append(
+                {
+                    "raw": raw,
+                    "command": command,
+                    "args": command_parts[1:],
+                    "span": [match.start(), match.end()],
+                }
+            )
+            continue
+
         _skip(parsed, raw, "unknown_tag")
 
     return parsed
@@ -100,7 +120,9 @@ def strip_player_change_tags(text: str) -> str:
 
     def replace_tag(match: re.Match[str]) -> str:
         raw = match.group(1).strip()
-        return "" if raw.startswith("player_change|") else match.group(0)
+        if raw.startswith(("player_change|", "scene_change|")):
+            return ""
+        return match.group(0)
 
     cleaned = re.sub(r"\s+", " ", TAG_PATTERN.sub(replace_tag, text or "")).strip()
     return re.sub(r"\s+([.,!?;:])", r"\1", cleaned)
