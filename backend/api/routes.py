@@ -84,12 +84,17 @@ def process_lite_turn(
 
     scene = game_state.setdefault("scene", {})
     previous_entities = list(scene.get("entities", []))
+    allowed_scene_entities, skipped_due_to_ownership = filter_scene_entities_by_ownership(
+        game_state=game_state,
+        parsed_entities=parsed_entities,
+        player_change_tags=parsed_tags["player_changes"],
+        scene_change_tags=parsed_tags["scene_changes"],
+    )
     location_changed, cleared_entities = apply_location_change_if_needed(
         game_state,
         parsed_tags["player_changes"],
         parsed_entities,
     )
-    scene_added, scene_updated = merge_scene_entities(scene, parsed_entities)
     game_state["scene"]["last_response"] = raw_llm_response
 
     applied_changes, skipped_changes = apply_player_changes(
@@ -98,6 +103,7 @@ def process_lite_turn(
         parsed_entities=parsed_entities,
         previous_entities=previous_entities,
     )
+    scene_added, scene_updated = merge_scene_entities(scene, allowed_scene_entities)
     removed_due_to_player_change = remove_scene_entities_moved_to_player_state(
         game_state,
         applied_changes,
@@ -126,6 +132,7 @@ def process_lite_turn(
         "location_changed": location_changed,
         "scene_entities_added": scene_added,
         "scene_entities_updated": scene_updated,
+        "scene_entities_skipped_due_to_ownership": skipped_due_to_ownership,
         "scene_entities_removed_due_to_player_change": removed_due_to_player_change,
         "scene_changes_applied": applied_scene_changes,
         "scene_entities_cleared_due_to_location_change": cleared_entities,
@@ -201,6 +208,96 @@ def merge_scene_entities(
     return added, updated
 
 
+def filter_scene_entities_by_ownership(
+    game_state: dict[str, Any],
+    parsed_entities: list[dict[str, Any]],
+    player_change_tags: list[dict[str, Any]],
+    scene_change_tags: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    blocked_reasons = _scene_entity_ownership_reasons(
+        game_state,
+        player_change_tags,
+        scene_change_tags,
+    )
+    allowed: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+
+    for entity in parsed_entities:
+        entity_id = str(entity.get("id", ""))
+        reason = blocked_reasons.get(entity_id)
+        if reason:
+            skipped.append(
+                {
+                    "id": entity_id,
+                    "class": str(entity.get("class", "")),
+                    "name": str(entity.get("name", "")),
+                    "reason": reason,
+                }
+            )
+            continue
+        allowed.append(entity)
+
+    return allowed, skipped
+
+
+def _scene_entity_ownership_reasons(
+    game_state: dict[str, Any],
+    player_change_tags: list[dict[str, Any]],
+    scene_change_tags: list[dict[str, Any]],
+) -> dict[str, str]:
+    reasons: dict[str, str] = {}
+    scene = game_state.setdefault("scene", {})
+    player = game_state.setdefault("player", {})
+
+    current_location_id = str(scene.setdefault("location", {}).get("id", ""))
+    if current_location_id:
+        reasons[current_location_id] = "current_location"
+
+    target_location_id = _target_location_id(player_change_tags)
+    if target_location_id:
+        reasons[target_location_id] = "target_location"
+
+    for item in player.setdefault("inventory", []):
+        _add_owned_reason(reasons, item, "already_in_inventory")
+    for skill in player.setdefault("skills", []):
+        _add_owned_reason(reasons, skill, "already_in_skills")
+    for currency in player.setdefault("currencies", []):
+        _add_owned_reason(reasons, currency, "already_in_currencies")
+
+    for container_name, value in player.items():
+        if container_name in {"inventory", "skills", "currencies"}:
+            continue
+        if isinstance(value, list):
+            for item in value:
+                _add_owned_reason(reasons, item, f"already_in_player_{container_name}")
+        elif isinstance(value, dict):
+            _add_owned_reason(reasons, value, f"already_in_player_{container_name}")
+
+    for tag in player_change_tags:
+        command = str(tag.get("command", ""))
+        args = list(tag.get("args", []))
+        if command == "add_item" and len(args) == 1:
+            reasons[str(args[0])] = "added_to_inventory_this_turn"
+        elif command == "add_skill" and len(args) == 1:
+            reasons[str(args[0])] = "added_to_skills_this_turn"
+        elif command == "add_currency" and len(args) == 2:
+            reasons[str(args[0])] = "added_to_currencies_this_turn"
+
+    for tag in scene_change_tags:
+        if tag.get("command") == "remove_entity" and len(tag.get("args", [])) == 1:
+            reasons[str(tag["args"][0])] = "removed_by_scene_change"
+
+    return reasons
+
+
+def _add_owned_reason(reasons: dict[str, str], item: object, reason: str) -> None:
+    if not isinstance(item, dict):
+        return
+    item_id = str(item.get("id", ""))
+    if item_id and item_id not in reasons:
+        reasons[item_id] = reason
+
+
 def remove_scene_entities_moved_to_player_state(
     game_state: dict[str, Any],
     applied_changes: list[dict[str, Any]],
@@ -208,7 +305,7 @@ def remove_scene_entities_moved_to_player_state(
     moved_ids = {
         str(change["id"])
         for change in applied_changes
-        if change.get("action") in {"add_item", "add_skill"} and change.get("id")
+        if change.get("action") in {"add_item", "add_skill", "add_currency", "set_location"} and change.get("id")
     }
     if not moved_ids:
         return []

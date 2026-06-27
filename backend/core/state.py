@@ -50,6 +50,7 @@ def create_initial_game_state() -> dict[str, Any]:
             "parsed_tags": {"entities": [], "player_changes": [], "scene_changes": []},
             "applied_changes": [],
             "malformed_or_skipped_tags": [],
+            "scene_entities_skipped_due_to_ownership": [],
         },
         "latest_change_summary": [],
         "turn_count": 0,
@@ -91,6 +92,7 @@ def normalize_game_state(state: dict[str, Any]) -> dict[str, Any]:
     normalized["debug"]["parsed_tags"].setdefault("scene_changes", [])
     normalized["debug"].setdefault("applied_changes", [])
     normalized["debug"].setdefault("malformed_or_skipped_tags", [])
+    normalized["debug"].setdefault("scene_entities_skipped_due_to_ownership", [])
     normalized.setdefault("latest_change_summary", [])
     normalized.setdefault("turn_count", 0)
     normalized.setdefault("output_language", "")

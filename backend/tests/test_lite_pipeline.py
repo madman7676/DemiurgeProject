@@ -229,8 +229,13 @@ class LitePipelineTest(unittest.TestCase):
         self.assertIn("guard_01", entity_ids)
         self.assertTrue(result["debug"]["location_changed"])
         self.assertEqual(result["debug"]["scene_entities_cleared_due_to_location_change"][0]["id"], "merchant_01")
+        self.assertFalse(any(entity["id"] == "market_lane" for entity in result["visible_state"]["scene"]["entities"]))
+        self.assertEqual(
+            result["debug"]["scene_entities_skipped_due_to_ownership"][0]["reason"],
+            "target_location",
+        )
 
-    def test_added_item_is_removed_from_scene_entities(self):
+    def test_added_item_is_skipped_before_scene_storage(self):
         class FakeNarrator:
             def narrate(self, player_input, session_state, on_token=None):
                 return (
@@ -248,16 +253,62 @@ class LitePipelineTest(unittest.TestCase):
         result = process_lite_turn("беру ніж", RouteContext(FakeStore(), FakeNarrator()))
 
         self.assertFalse(any(entity["id"] == "rusty_knife_01" for entity in result["visible_state"]["scene"]["entities"]))
-        self.assertEqual(result["debug"]["scene_entities_removed_due_to_player_change"][0]["id"], "rusty_knife_01")
+        self.assertEqual(result["debug"]["scene_entities_removed_due_to_player_change"], [])
+        self.assertEqual(
+            result["debug"]["scene_entities_skipped_due_to_ownership"],
+            [
+                {
+                    "id": "rusty_knife_01",
+                    "class": "item",
+                    "name": "іржавий ніж",
+                    "reason": "added_to_inventory_this_turn",
+                }
+            ],
+        )
 
-    def test_scene_change_removes_scene_entity_without_touching_inventory(self):
+    def test_existing_inventory_item_entity_tag_is_not_stored_in_scene(self):
+        class FakeNarrator:
+            def narrate(self, player_input, session_state, on_token=None):
+                return "Ти оглядаєш [[entity:item|old_compass|Old Compass|available|C]]."
+
+        class FakeStore:
+            def __init__(self):
+                self.state = create_initial_game_state()
+
+            def get_session(self):
+                return self.state
+
+        result = process_lite_turn("оглянути компас", RouteContext(FakeStore(), FakeNarrator()))
+
+        self.assertFalse(any(entity["id"] == "old_compass" for entity in result["visible_state"]["scene"]["entities"]))
+        self.assertEqual(result["debug"]["scene_entities_skipped_due_to_ownership"][0]["reason"], "already_in_inventory")
+        self.assertIn("[[entity:item|old_compass|Old Compass|available|C]]", result["narrative_text"])
+
+    def test_current_location_entity_tag_is_not_stored_in_scene(self):
+        class FakeNarrator:
+            def narrate(self, player_input, session_state, on_token=None):
+                return "Ти стоїш на [[entity:place|stonemarket|ринок|available|P]]."
+
+        class FakeStore:
+            def __init__(self):
+                self.state = create_initial_game_state()
+
+            def get_session(self):
+                return self.state
+
+        result = process_lite_turn("де я", RouteContext(FakeStore(), FakeNarrator()))
+
+        self.assertFalse(any(entity["id"] == "stonemarket" for entity in result["visible_state"]["scene"]["entities"]))
+        self.assertEqual(result["debug"]["scene_entities_skipped_due_to_ownership"][0]["reason"], "current_location")
+
+    def test_scene_change_removed_entity_is_not_readded_to_scene(self):
         class FakeNarrator:
             responses = [
-                "На столі стоїть [[entity:item|ceramic_01|кераміка|available|C]].",
+                "Тут є [[entity:item|torch_01|смолоскип|available|T]].",
                 (
-                    "Кераміка тріскає і лишає "
-                    "[[entity:item|ceramic_shards_01|керамічні уламки|available|S]]. "
-                    "[[scene_change|remove_entity:ceramic_01]]"
+                    "Смолоскип догорає. "
+                    "[[entity:item|torch_01|смолоскип|available|T]] "
+                    "[[scene_change|remove_entity:torch_01]]"
                 ),
             ]
 
@@ -267,6 +318,40 @@ class LitePipelineTest(unittest.TestCase):
         class FakeStore:
             def __init__(self):
                 self.state = create_initial_game_state()
+
+            def get_session(self):
+                return self.state
+
+        store = FakeStore()
+        narrator = FakeNarrator()
+        process_lite_turn("оглянутись", RouteContext(store, narrator))
+        result = process_lite_turn("чекати", RouteContext(store, narrator))
+
+        self.assertFalse(any(entity["id"] == "torch_01" for entity in result["visible_state"]["scene"]["entities"]))
+        self.assertEqual(result["debug"]["scene_entities_skipped_due_to_ownership"][0]["reason"], "removed_by_scene_change")
+
+    def test_scene_change_removes_scene_entity_without_touching_inventory(self):
+        class FakeNarrator:
+            def narrate(self, player_input, session_state, on_token=None):
+                return (
+                    "Кераміка тріскає і лишає "
+                    "[[entity:item|ceramic_shards_01|керамічні уламки|available|S]]. "
+                    "[[scene_change|remove_entity:ceramic_01]]"
+                )
+
+        class FakeStore:
+            def __init__(self):
+                self.state = create_initial_game_state()
+                self.state["scene"]["entities"].append(
+                    {
+                        "id": "ceramic_01",
+                        "class": "item",
+                        "name": "кераміка",
+                        "visibility": "available",
+                        "icon": "C",
+                        "last_seen_turn": 1,
+                    }
+                )
                 self.state["player"]["inventory"].append(
                     {"id": "ceramic_01", "name": "кишенькова кераміка", "icon": "C"}
                 )
@@ -276,7 +361,6 @@ class LitePipelineTest(unittest.TestCase):
 
         store = FakeStore()
         narrator = FakeNarrator()
-        process_lite_turn("дивлюся", RouteContext(store, narrator))
         result = process_lite_turn("розбити", RouteContext(store, narrator))
         scene_ids = [entity["id"] for entity in result["visible_state"]["scene"]["entities"]]
         inventory_ids = [item["id"] for item in result["visible_state"]["player"]["inventory"]]
