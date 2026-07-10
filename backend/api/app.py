@@ -1,4 +1,4 @@
-"""FastAPI app for the Lite exploration backend."""
+"""FastAPI app for the Hyperlite exploration backend."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from backend.api.routes import (
     RouteContext,
     get_session_response,
-    process_lite_turn,
+    process_hyperlite_turn,
     process_message_response,
 )
 from backend.config import Settings, load_settings
@@ -73,7 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/message")
     def post_message(payload: MessageRequest) -> dict[str, Any]:
-        """Process a single player message through the Lite pipeline."""
+        """Process a single player message through the Hyperlite pipeline."""
 
         request_payload = payload.model_dump(exclude_none=True)
         raw_message = request_payload["message"].strip()
@@ -106,7 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 def _stream_message_response(payload: dict[str, Any], context: RouteContext):
-    """Run the sync Lite pipeline in a worker while yielding narrator chunks."""
+    """Run the sync Hyperlite pipeline in a worker while yielding narrator chunks."""
 
     events: Queue[str | None] = Queue()
 
@@ -117,7 +117,7 @@ def _stream_message_response(payload: dict[str, Any], context: RouteContext):
         try:
             if "session_state" in payload and isinstance(payload["session_state"], dict):
                 context.session_store.replace_session(payload["session_state"])
-            result = process_lite_turn(
+            result = process_hyperlite_turn(
                 str(payload.get("message", "")),
                 on_narration_chunk=lambda chunk: emit({"type": "narration_delta", "text": chunk}),
                 context=context,
@@ -125,7 +125,7 @@ def _stream_message_response(payload: dict[str, Any], context: RouteContext):
             emit(
                 {
                     "type": "pipeline_update",
-                    "step": "lite",
+                    "step": "hyperlite",
                     "debug": result["debug"],
                 }
             )

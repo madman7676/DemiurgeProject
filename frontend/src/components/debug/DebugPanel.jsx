@@ -1,4 +1,4 @@
-// Hidden developer-facing panel for the latest Lite debug payload.
+// Hidden developer-facing panel for the latest Hyperlite debug payload.
 export function DebugPanel({ debug }) {
   return (
     <details className="debug-panel">

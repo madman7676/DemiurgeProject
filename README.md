@@ -2,7 +2,7 @@
 
 Minimal web text adventure powered by a local Ollama LLM.
 
-The backend is a tag-driven Lite loop:
+The backend is a Hyperlite loop:
 
 ```text
 User input
@@ -32,43 +32,44 @@ backend/
     narrator.py
     narrator_prompt.txt
   tests/
-    test_lite_pipeline.py
+    test_hyperlite_pipeline.py
 ```
 
 ## GameState Shape
 
 ```text
-scene:
-  location: { id, name, icon }
-  entities: [{ id, class, name, visibility, icon, last_seen_turn }]
-  last_response
 player:
-  inventory: [{ id, name, icon }]
-  currencies: [{ id, name, icon, amount }]
+  inventory: [{ id, name, icon, quantity }]
+  resources: [{ id, name, icon, amount }]
   skills: [{ id, name, icon }]
 history:
-  [{ user_input, narrator_response_clean, parsed_entities, applied_changes }]
+  [{ user_input, narrator_response_for_ui, narrator_response_clean, applied_changes }]
 debug:
   raw_llm_response
+  narrator_response_for_ui
+  llm_diagnostics
   parsed_tags
   applied_changes
   malformed_or_skipped_tags
+  warnings
 ```
 
 ## Tags
 
-```text
-[[entity:item|rusty_knife_01|rusty knife|available|K]]
-[[entity:currency|gold|золото|available|G]]
-[[entity:place|market_lane|ринковий провулок|available|P]]
+Only `player_change` tags are parsed. Narrative text is otherwise plain text.
 
-[[player_change|add_item:rusty_knife_01]]
-[[player_change|add_currency:gold:10]]
-[[player_change|set_location:market_lane]]
+```text
+[[player_change|add_item|item_id|name|icon|quantity]]
+[[player_change|remove_item|item_id|quantity]]
+[[player_change|add_resource|resource_id|name|icon|amount]]
+[[player_change|remove_resource|resource_id|amount]]
+[[player_change|add_skill|skill_id|name|icon]]
+[[player_change|remove_skill|skill_id]]
 ```
 
-Entity tags from the latest response replace the current visible scene entities.
-Location changes only through `set_location`.
+Item stacks merge only by `item_id`. Resource stacks merge only by `resource_id`.
+Remove operations clamp at zero and record debug warnings when the requested
+quantity or amount is greater than the current stack.
 
 ## Local Setup
 

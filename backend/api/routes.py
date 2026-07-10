@@ -1,4 +1,4 @@
-"""Route-facing handlers for the tag-driven Lite API."""
+"""Route-facing handlers for the Hyperlite API."""
 
 from __future__ import annotations
 
@@ -6,16 +6,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.core.state import (
-    DEFAULT_ICON,
     InMemorySessionStore,
     append_history_turn,
     build_messages,
     build_visible_state,
     detect_output_language,
-    entity_to_currency,
-    entity_to_inventory_item,
-    entity_to_location,
-    entity_to_skill,
 )
 from backend.core.tag_parser import parse_tags, strip_player_change_tags, strip_tags
 from backend.llm.narrator import Narrator
@@ -46,33 +41,30 @@ def process_message_response(
     payload: dict[str, Any],
     context: RouteContext,
 ) -> dict[str, Any]:
-    """Process a single player message through the tag-driven Lite flow."""
+    """Process a single player message through the Hyperlite flow."""
 
     raw_message = str(payload.get("message", "")).strip()
 
     if "session_state" in payload and isinstance(payload["session_state"], dict):
         context.session_store.replace_session(payload["session_state"])
 
-    result = process_lite_turn(raw_message, context)
+    result = process_hyperlite_turn(raw_message, context)
     return {
         "output_language": context.session_store.get_session().get("output_language", ""),
         **result,
     }
 
 
-def process_lite_turn(
+def process_hyperlite_turn(
     raw_message: str,
     context: RouteContext,
     on_narration_chunk=None,
 ) -> dict[str, Any]:
-    """Run: user input -> Narrator -> parse tags -> update state -> save history."""
+    """Run: user input -> Narrator -> parse player changes -> update player state."""
 
     game_state = context.session_store.get_session()
     if not game_state.get("output_language"):
         game_state["output_language"] = detect_output_language(raw_message, fallback="uk")
-
-    turn = int(game_state.get("turn_count", 0)) + 1
-    game_state["turn_count"] = turn
 
     raw_llm_response = context.narrator.narrate(
         raw_message,
@@ -80,71 +72,31 @@ def process_lite_turn(
         on_token=on_narration_chunk,
     )
     parsed_tags = parse_tags(raw_llm_response)
-    parsed_entities = [_entity_for_state(entity, turn) for entity in parsed_tags["entities"]]
-
-    scene = game_state.setdefault("scene", {})
-    previous_entities = list(scene.get("entities", []))
-    allowed_scene_entities, skipped_due_to_ownership = filter_scene_entities_by_ownership(
-        game_state=game_state,
-        parsed_entities=parsed_entities,
-        player_change_tags=parsed_tags["player_changes"],
-        scene_change_tags=parsed_tags["scene_changes"],
-    )
-    location_changed, cleared_entities = apply_location_change_if_needed(
-        game_state,
-        parsed_tags["player_changes"],
-        parsed_entities,
-    )
-    game_state["scene"]["last_response"] = raw_llm_response
-
-    applied_changes, skipped_changes = apply_player_changes(
+    applied_changes, skipped_changes, warnings = apply_player_changes(
         game_state=game_state,
         player_change_tags=parsed_tags["player_changes"],
-        parsed_entities=parsed_entities,
-        previous_entities=previous_entities,
     )
-    scene_added, scene_updated = merge_scene_entities(scene, allowed_scene_entities)
-    removed_due_to_player_change = remove_scene_entities_moved_to_player_state(
-        game_state,
-        applied_changes,
-    )
-    applied_scene_changes, skipped_scene_changes = apply_scene_changes(
-        game_state=game_state,
-        scene_change_tags=parsed_tags["scene_changes"],
-    )
-    all_applied_changes = applied_changes + applied_scene_changes
-    malformed_or_skipped = parsed_tags["malformed_or_skipped_tags"] + skipped_changes + skipped_scene_changes
+    malformed_or_skipped = parsed_tags["malformed_or_skipped_tags"] + skipped_changes
     narrator_response_for_ui = strip_player_change_tags(raw_llm_response)
     narrator_response_clean = strip_tags(raw_llm_response)
-    latest_change_summary = build_change_summary(all_applied_changes)
+    latest_change_summary = build_change_summary(applied_changes)
 
     game_state["debug"] = {
         "raw_llm_response": raw_llm_response,
         "narrator_response_for_ui": narrator_response_for_ui,
         "llm_diagnostics": dict(getattr(context.narrator, "last_diagnostics", {}) or {}),
-        "parsed_tags": {
-            "entities": parsed_entities,
-            "player_changes": parsed_tags["player_changes"],
-            "scene_changes": parsed_tags["scene_changes"],
-        },
-        "applied_changes": all_applied_changes,
+        "parsed_tags": {"player_changes": parsed_tags["player_changes"]},
+        "applied_changes": applied_changes,
         "malformed_or_skipped_tags": malformed_or_skipped,
-        "location_changed": location_changed,
-        "scene_entities_added": scene_added,
-        "scene_entities_updated": scene_updated,
-        "scene_entities_skipped_due_to_ownership": skipped_due_to_ownership,
-        "scene_entities_removed_due_to_player_change": removed_due_to_player_change,
-        "scene_changes_applied": applied_scene_changes,
-        "scene_entities_cleared_due_to_location_change": cleared_entities,
+        "warnings": warnings,
     }
-    game_state["latest_change_summary"] = latest_change_summary
     append_history_turn(
         game_state,
         user_input=raw_message,
         narrator_response_for_ui=narrator_response_for_ui,
         narrator_response_clean=narrator_response_clean,
-        parsed_entities=parsed_entities,
-        applied_changes=all_applied_changes,
+        applied_changes=applied_changes,
+        change_summary=latest_change_summary,
     )
 
     return {
@@ -158,164 +110,6 @@ def process_lite_turn(
     }
 
 
-def apply_location_change_if_needed(
-    game_state: dict[str, Any],
-    player_change_tags: list[dict[str, Any]],
-    parsed_entities: list[dict[str, Any]],
-) -> tuple[bool, list[dict[str, Any]]]:
-    scene = game_state.setdefault("scene", {})
-    current_location = scene.setdefault("location", {})
-    current_location_id = str(current_location.get("id", ""))
-    target_location_id = _target_location_id(player_change_tags)
-
-    if not target_location_id or target_location_id == current_location_id:
-        return False, []
-
-    location_entity = _find_entity(parsed_entities, target_location_id, "place")
-    if location_entity is None:
-        location_entity = {"id": target_location_id, "name": target_location_id, "icon": DEFAULT_ICON["place"]}
-    scene["location"] = entity_to_location(location_entity, target_location_id)
-    cleared_entities = list(scene.get("entities", []))
-    scene["entities"] = []
-    return True, cleared_entities
-
-
-def merge_scene_entities(
-    scene: dict[str, Any],
-    parsed_entities: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    scene_entities = scene.setdefault("entities", [])
-    added: list[dict[str, Any]] = []
-    updated: list[dict[str, Any]] = []
-
-    for entity in parsed_entities:
-        existing = _find_by_id(scene_entities, str(entity.get("id", "")))
-        if existing is None:
-            scene_entities.append(dict(entity))
-            added.append(dict(entity))
-            continue
-        existing.update(
-            {
-                "class": entity.get("class", existing.get("class")),
-                "name": entity.get("name", existing.get("name")),
-                "visibility": entity.get("visibility", existing.get("visibility")),
-                "icon": entity.get("icon", existing.get("icon")),
-                "last_seen_turn": entity.get("last_seen_turn", existing.get("last_seen_turn")),
-            }
-        )
-        updated.append(dict(existing))
-
-    return added, updated
-
-
-def filter_scene_entities_by_ownership(
-    game_state: dict[str, Any],
-    parsed_entities: list[dict[str, Any]],
-    player_change_tags: list[dict[str, Any]],
-    scene_change_tags: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    blocked_reasons = _scene_entity_ownership_reasons(
-        game_state,
-        player_change_tags,
-        scene_change_tags,
-    )
-    allowed: list[dict[str, Any]] = []
-    skipped: list[dict[str, str]] = []
-
-    for entity in parsed_entities:
-        entity_id = str(entity.get("id", ""))
-        reason = blocked_reasons.get(entity_id)
-        if reason:
-            skipped.append(
-                {
-                    "id": entity_id,
-                    "class": str(entity.get("class", "")),
-                    "name": str(entity.get("name", "")),
-                    "reason": reason,
-                }
-            )
-            continue
-        allowed.append(entity)
-
-    return allowed, skipped
-
-
-def _scene_entity_ownership_reasons(
-    game_state: dict[str, Any],
-    player_change_tags: list[dict[str, Any]],
-    scene_change_tags: list[dict[str, Any]],
-) -> dict[str, str]:
-    reasons: dict[str, str] = {}
-    scene = game_state.setdefault("scene", {})
-    player = game_state.setdefault("player", {})
-
-    current_location_id = str(scene.setdefault("location", {}).get("id", ""))
-    if current_location_id:
-        reasons[current_location_id] = "current_location"
-
-    target_location_id = _target_location_id(player_change_tags)
-    if target_location_id:
-        reasons[target_location_id] = "target_location"
-
-    for item in player.setdefault("inventory", []):
-        _add_owned_reason(reasons, item, "already_in_inventory")
-    for skill in player.setdefault("skills", []):
-        _add_owned_reason(reasons, skill, "already_in_skills")
-    for currency in player.setdefault("currencies", []):
-        _add_owned_reason(reasons, currency, "already_in_currencies")
-
-    for container_name, value in player.items():
-        if container_name in {"inventory", "skills", "currencies"}:
-            continue
-        if isinstance(value, list):
-            for item in value:
-                _add_owned_reason(reasons, item, f"already_in_player_{container_name}")
-        elif isinstance(value, dict):
-            _add_owned_reason(reasons, value, f"already_in_player_{container_name}")
-
-    for tag in player_change_tags:
-        command = str(tag.get("command", ""))
-        args = list(tag.get("args", []))
-        if command == "add_item" and len(args) == 1:
-            reasons[str(args[0])] = "added_to_inventory_this_turn"
-        elif command == "add_skill" and len(args) == 1:
-            reasons[str(args[0])] = "added_to_skills_this_turn"
-        elif command == "add_currency" and len(args) == 2:
-            reasons[str(args[0])] = "added_to_currencies_this_turn"
-
-    for tag in scene_change_tags:
-        if tag.get("command") == "remove_entity" and len(tag.get("args", [])) == 1:
-            reasons[str(tag["args"][0])] = "removed_by_scene_change"
-
-    return reasons
-
-
-def _add_owned_reason(reasons: dict[str, str], item: object, reason: str) -> None:
-    if not isinstance(item, dict):
-        return
-    item_id = str(item.get("id", ""))
-    if item_id and item_id not in reasons:
-        reasons[item_id] = reason
-
-
-def remove_scene_entities_moved_to_player_state(
-    game_state: dict[str, Any],
-    applied_changes: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    moved_ids = {
-        str(change["id"])
-        for change in applied_changes
-        if change.get("action") in {"add_item", "add_skill", "add_currency", "set_location"} and change.get("id")
-    }
-    if not moved_ids:
-        return []
-
-    scene_entities = game_state.setdefault("scene", {}).setdefault("entities", [])
-    removed = [entity for entity in scene_entities if entity.get("id") in moved_ids]
-    scene_entities[:] = [entity for entity in scene_entities if entity.get("id") not in moved_ids]
-    return removed
-
-
 def build_change_summary(applied_changes: list[dict[str, Any]]) -> list[dict[str, str]]:
     summary: list[dict[str, str]] = []
     for change in applied_changes:
@@ -323,207 +117,156 @@ def build_change_summary(applied_changes: list[dict[str, Any]]) -> list[dict[str
         name = str(change.get("name") or change.get("id") or "")
         amount = int(change.get("amount", 0) or 0)
         if action == "add_item":
-            summary.append({"kind": action, "text": f"Отримано: {name}"})
+            quantity = int(change.get("quantity", 0) or 0)
+            summary.append({"kind": action, "text": f"Отримано: {name} x{quantity}"})
         elif action == "remove_item":
-            summary.append({"kind": action, "text": f"Втрачено: {name}"})
-        elif action == "add_currency":
+            quantity = int(change.get("quantity", 0) or 0)
+            summary.append({"kind": action, "text": f"Втрачено: {name} x{quantity}"})
+        elif action == "add_resource":
             summary.append({"kind": action, "text": f"Отримано: {amount} {name}"})
-        elif action == "remove_currency":
+        elif action == "remove_resource":
             summary.append({"kind": action, "text": f"Витрачено: {amount} {name}"})
         elif action == "add_skill":
             summary.append({"kind": action, "text": f"Отримано навичку: {name}"})
         elif action == "remove_skill":
             summary.append({"kind": action, "text": f"Втрачено навичку: {name}"})
-        elif action == "set_location":
-            summary.append({"kind": action, "text": f"Локація: {name}"})
-        elif action == "remove_entity":
-            summary.append({"kind": action, "text": f"Зникло: {name}"})
     return summary
-
-
-def apply_scene_changes(
-    game_state: dict[str, Any],
-    scene_change_tags: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Apply known scene_change tags to scene entities only."""
-
-    applied: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-    scene_entities = game_state.setdefault("scene", {}).setdefault("entities", [])
-
-    for tag in scene_change_tags:
-        command = str(tag.get("command", ""))
-        args = list(tag.get("args", []))
-
-        if command == "remove_entity":
-            if len(args) != 1:
-                skipped.append(_invalid(tag, "wrong_argument_count"))
-                continue
-            entity_id = str(args[0])
-            existing = _find_by_id(scene_entities, entity_id)
-            name = existing.get("name", entity_id) if existing is not None else entity_id
-            scene_entities[:] = [entity for entity in scene_entities if entity.get("id") != entity_id]
-            applied.append(
-                {
-                    "source": "scene_change",
-                    "action": "remove_entity",
-                    "id": entity_id,
-                    "name": str(name),
-                    "removed": existing is not None,
-                }
-            )
-
-    return applied, skipped
 
 
 def apply_player_changes(
     game_state: dict[str, Any],
     player_change_tags: list[dict[str, Any]],
-    parsed_entities: list[dict[str, Any]],
-    previous_entities: list[dict[str, Any]] | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Apply known player_change tags without world-logic validation."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Apply strict Hyperlite player_change tags."""
 
     applied: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
     player = game_state.setdefault("player", {})
     player.setdefault("inventory", [])
-    player.setdefault("currencies", [])
+    player.setdefault("resources", [])
     player.setdefault("skills", [])
-    previous_entities = previous_entities or []
 
     for tag in player_change_tags:
         command = str(tag.get("command", ""))
         args = list(tag.get("args", []))
 
-        if command in {"add_item", "remove_item", "add_skill", "remove_skill", "set_location"} and len(args) != 1:
-            skipped.append(_invalid(tag, "wrong_argument_count"))
-            continue
-        if command in {"add_currency", "remove_currency"} and len(args) != 2:
-            skipped.append(_invalid(tag, "wrong_argument_count"))
-            continue
-
         if command == "add_item":
-            applied.append(_add_item(player, args[0], parsed_entities))
-        elif command == "remove_item":
-            applied.append(_remove_by_id(player["inventory"], args[0], "remove_item"))
-        elif command == "add_currency":
-            change, invalid = _add_currency(player, args[0], args[1], parsed_entities, previous_entities)
+            change, invalid = _add_item(player, args)
             (skipped if invalid else applied).append(change)
-        elif command == "remove_currency":
-            applied.append(_remove_currency(player, args[0], args[1]))
+        elif command == "remove_item":
+            change, warning = _remove_stack(player["inventory"], args, "quantity", "remove_item")
+            applied.append(change)
+            if warning:
+                warnings.append(warning)
+        elif command == "add_resource":
+            change, invalid = _add_resource(player, args)
+            (skipped if invalid else applied).append(change)
+        elif command == "remove_resource":
+            change, warning = _remove_stack(player["resources"], args, "amount", "remove_resource")
+            applied.append(change)
+            if warning:
+                warnings.append(warning)
         elif command == "add_skill":
-            applied.append(_add_skill(player, args[0], parsed_entities))
+            applied.append(_add_skill(player, args))
         elif command == "remove_skill":
-            applied.append(_remove_by_id(player["skills"], args[0], "remove_skill"))
-        elif command == "set_location":
-            applied.append(_set_location(game_state, args[0], parsed_entities))
+            applied.append(_remove_skill(player, args[0]))
 
-    return applied, skipped
+    return applied, skipped, warnings
 
 
-def _entity_for_state(entity: dict[str, Any], turn: int) -> dict[str, Any]:
-    entity_class = str(entity["class"])
-    return {
-        "id": str(entity["id"]),
-        "class": entity_class,
-        "name": str(entity["name"]),
-        "visibility": str(entity["visibility"]),
-        "icon": str(entity.get("icon") or DEFAULT_ICON.get(entity_class, "•")),
-        "last_seen_turn": turn,
-    }
-
-
-def _add_item(player: dict[str, Any], item_id: str, entities: list[dict[str, Any]]) -> dict[str, Any]:
+def _add_item(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], bool]:
+    item_id, name, icon, quantity_text = args[0], args[1], args[2], args[3]
+    quantity = _to_non_negative_int(quantity_text)
+    if quantity <= 0:
+        return _invalid({"raw": f"add_item:{item_id}"}, "invalid_quantity"), True
     inventory = player["inventory"]
     existing = _find_by_id(inventory, item_id)
-    entity = _find_entity(entities, item_id, "item") or existing or {"id": item_id, "name": item_id}
-    if not existing:
-        inventory.append(entity_to_inventory_item(entity, item_id))
-    return {"action": "add_item", "id": item_id, "name": str(entity.get("name") or item_id)}
-
-
-def _add_skill(player: dict[str, Any], skill_id: str, entities: list[dict[str, Any]]) -> dict[str, Any]:
-    skills = player["skills"]
-    existing = _find_by_id(skills, skill_id)
-    entity = _find_entity(entities, skill_id, "skill") or existing or {"id": skill_id, "name": skill_id}
-    if not existing:
-        skills.append(entity_to_skill(entity, skill_id))
-    return {"action": "add_skill", "id": skill_id, "name": str(entity.get("name") or skill_id)}
-
-
-def _add_currency(
-    player: dict[str, Any],
-    currency_id: str,
-    amount_text: str,
-    entities: list[dict[str, Any]],
-    previous_entities: list[dict[str, Any]],
-) -> tuple[dict[str, Any], bool]:
-    amount = _to_int(amount_text)
-    existing = _find_by_id(player["currencies"], currency_id)
-    current_entity = _find_entity(entities, currency_id, "currency")
-    previous_entity = _find_entity(previous_entities, currency_id, "currency")
-    currency_source = current_entity or existing or previous_entity
-    if currency_source is None:
-        return _invalid({"raw": f"add_currency:{currency_id}:{amount_text}"}, "invalid_reference"), True
     if existing is None:
-        existing = entity_to_currency(currency_source, amount=0)
-        player["currencies"].append(existing)
-    elif current_entity is not None:
-        existing["name"] = current_entity.get("name", existing.get("name", currency_id))
-        existing["icon"] = current_entity.get("icon", existing.get("icon", DEFAULT_ICON["currency"]))
-    existing["amount"] = int(existing.get("amount", 0)) + amount
+        existing = {"id": item_id, "name": name, "icon": icon, "quantity": 0}
+        inventory.append(existing)
+    else:
+        existing["name"] = name
+        existing["icon"] = icon
+    existing["quantity"] = int(existing.get("quantity", 0) or 0) + quantity
+    return {"action": "add_item", "id": item_id, "name": name, "icon": icon, "quantity": quantity}, False
+
+
+def _add_resource(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], bool]:
+    resource_id, name, icon, amount_text = args[0], args[1], args[2], args[3]
+    amount = _to_non_negative_int(amount_text)
+    if amount <= 0:
+        return _invalid({"raw": f"add_resource:{resource_id}"}, "invalid_amount"), True
+    resources = player["resources"]
+    existing = _find_by_id(resources, resource_id)
+    if existing is None:
+        existing = {"id": resource_id, "name": name, "icon": icon, "amount": 0}
+        resources.append(existing)
+    else:
+        existing["name"] = name
+        existing["icon"] = icon
+    existing["amount"] = int(existing.get("amount", 0) or 0) + amount
     return {
-        "action": "add_currency",
-        "id": currency_id,
-        "name": str(existing.get("name") or currency_id),
+        "action": "add_resource",
+        "id": resource_id,
+        "name": name,
+        "icon": icon,
         "amount": amount,
     }, False
 
 
-def _remove_currency(player: dict[str, Any], currency_id: str, amount_text: str) -> dict[str, Any]:
-    amount = _to_int(amount_text)
-    currency = _find_by_id(player["currencies"], currency_id)
-    name = currency.get("name", currency_id) if currency is not None else currency_id
-    if currency is not None:
-        currency["amount"] = max(0, int(currency.get("amount", 0)) - amount)
-    return {"action": "remove_currency", "id": currency_id, "name": str(name), "amount": amount}
+def _add_skill(player: dict[str, Any], args: list[str]) -> dict[str, Any]:
+    skill_id, name, icon = args[0], args[1], args[2]
+    skills = player["skills"]
+    existing = _find_by_id(skills, skill_id)
+    if existing is None:
+        skills.append({"id": skill_id, "name": name, "icon": icon})
+    else:
+        existing["name"] = name
+        existing["icon"] = icon
+    return {"action": "add_skill", "id": skill_id, "name": name, "icon": icon}
 
 
-def _set_location(game_state: dict[str, Any], location_id: str, entities: list[dict[str, Any]]) -> dict[str, Any]:
-    current = game_state.setdefault("scene", {}).setdefault("location", {})
-    entity = _find_entity(entities, location_id, "place")
-    if entity is None and current.get("id") == location_id:
-        entity = current
-    if entity is None:
-        entity = {"id": location_id, "name": location_id, "icon": DEFAULT_ICON["place"]}
-    game_state["scene"]["location"] = entity_to_location(entity, location_id)
-    return {"action": "set_location", "id": location_id, "name": str(entity.get("name") or location_id)}
+def _remove_skill(player: dict[str, Any], skill_id: str) -> dict[str, Any]:
+    skills = player["skills"]
+    existing = _find_by_id(skills, skill_id)
+    name = existing.get("name", skill_id) if existing is not None else skill_id
+    skills[:] = [skill for skill in skills if skill.get("id") != skill_id]
+    return {"action": "remove_skill", "id": skill_id, "name": str(name)}
 
 
-def _target_location_id(player_change_tags: list[dict[str, Any]]) -> str:
-    for tag in player_change_tags:
-        if tag.get("command") == "set_location" and len(tag.get("args", [])) == 1:
-            return str(tag["args"][0])
-    return ""
+def _remove_stack(
+    stacks: list[dict[str, Any]],
+    args: list[str],
+    amount_key: str,
+    action: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    stack_id, amount_text = args[0], args[1]
+    amount = _to_non_negative_int(amount_text)
+    existing = _find_by_id(stacks, stack_id)
+    name = existing.get("name", stack_id) if existing is not None else stack_id
+    current_amount = int(existing.get(amount_key, 0) or 0) if existing is not None else 0
+    new_amount = max(0, current_amount - amount)
+    warning = None
 
+    if existing is not None:
+        existing[amount_key] = new_amount
+    if amount > current_amount:
+        warning = {
+            "type": "underflow_clamped",
+            "action": action,
+            "id": stack_id,
+            "requested": amount,
+            "available": current_amount,
+        }
 
-def _remove_by_id(items: list[dict[str, Any]], item_id: str, action: str) -> dict[str, Any]:
-    existing = _find_by_id(items, item_id)
-    name = existing.get("name", item_id) if existing is not None else item_id
-    items[:] = [item for item in items if item.get("id") != item_id]
-    return {"action": action, "id": item_id, "name": str(name)}
-
-
-def _find_entity(entities: list[dict[str, Any]], entity_id: str, entity_class: str) -> dict[str, Any] | None:
-    return next(
-        (
-            entity
-            for entity in entities
-            if entity.get("id") == entity_id and entity.get("class") == entity_class
-        ),
-        None,
-    )
+    return {
+        "action": action,
+        "id": stack_id,
+        "name": str(name),
+        amount_key: amount,
+        "remaining": new_amount,
+    }, warning
 
 
 def _find_by_id(items: list[dict[str, Any]], item_id: str) -> dict[str, Any] | None:
@@ -534,8 +277,8 @@ def _invalid(tag: dict[str, Any], reason: str) -> dict[str, Any]:
     return {"raw": str(tag.get("raw", "")), "reason": reason}
 
 
-def _to_int(value: str) -> int:
+def _to_non_negative_int(value: str) -> int:
     try:
-        return int(value)
+        return max(0, int(value))
     except (TypeError, ValueError):
         return 0

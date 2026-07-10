@@ -1,4 +1,4 @@
-"""Backend runtime configuration for the Lite backend."""
+"""Backend runtime configuration for the Hyperlite backend."""
 
 from __future__ import annotations
 

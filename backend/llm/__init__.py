@@ -1,1 +1,1 @@
-"""LLM integration for the Lite backend."""
+"""LLM integration for the Hyperlite backend."""

@@ -1,4 +1,4 @@
-"""Single Narrator/GM module for the Lite backend."""
+"""Single Narrator/GM module for the Hyperlite backend."""
 
 from __future__ import annotations
 
@@ -31,10 +31,8 @@ class Narrator:
     ) -> str:
         prompt = json.dumps(
             {
-                "current_location": session_state.get("scene", {}).get("location", {}),
-                "current_scene_entities": session_state.get("scene", {}).get("entities", []),
                 "player_inventory": session_state.get("player", {}).get("inventory", []),
-                "player_currencies": session_state.get("player", {}).get("currencies", []),
+                "player_resources": session_state.get("player", {}).get("resources", []),
                 "player_skills": session_state.get("player", {}).get("skills", []),
                 "recent_history": session_state.get("history", [])[-8:],
                 "player_input": player_input,
@@ -101,12 +99,8 @@ def _tag_diagnostics(response_text: str) -> dict[str, Any]:
 
     if has_unclosed_tag:
         tag_body = response_text[last_open + 2 :]
-        if tag_body.startswith("entity:"):
-            tag_kind = "entity"
-        elif tag_body.startswith("player_change|"):
+        if tag_body.startswith("player_change|"):
             tag_kind = "player_change"
-        elif tag_body.startswith("scene_change|"):
-            tag_kind = "scene_change"
 
     return {
         "has_unclosed_tag": has_unclosed_tag,

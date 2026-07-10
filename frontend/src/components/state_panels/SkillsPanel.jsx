@@ -1,4 +1,4 @@
-// Visible player skills list. Skills have no levels in Lite.
+// Visible player skills list. Skills have no levels in Hyperlite.
 export function SkillsPanel({ skills }) {
   return (
     <section className="panel">

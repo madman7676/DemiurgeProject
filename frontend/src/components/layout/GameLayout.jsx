@@ -2,14 +2,12 @@ import { useEffect, useState } from "react";
 import { fetchSession, sendPlayerMessageStream } from "../../api/gameApi";
 import { ChatUI } from "../chat/ChatUI";
 import { DebugPanel } from "../debug/DebugPanel";
-import { CurrenciesPanel } from "../state_panels/CurrenciesPanel";
 import { HistoryPanel } from "../state_panels/HistoryPanel";
 import { InventoryPanel } from "../state_panels/InventoryPanel";
-import { LocalCuriositiesPanel } from "../state_panels/LocalCuriositiesPanel";
-import { LocationPanel } from "../state_panels/LocationPanel";
+import { ResourcesPanel } from "../state_panels/ResourcesPanel";
 import { SkillsPanel } from "../state_panels/SkillsPanel";
 
-// Layout keeps chat and Lite state views separate from transport logic.
+// Layout keeps chat and Hyperlite state views separate from transport logic.
 export function GameLayout() {
   const [visibleState, setVisibleState] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -79,7 +77,6 @@ export function GameLayout() {
     }
   }
 
-  const scene = visibleState?.scene || {};
   const player = visibleState?.player || {};
 
   return (
@@ -95,10 +92,8 @@ export function GameLayout() {
       </section>
 
       <aside className="state-panel-grid">
-        <LocationPanel location={scene.location} />
-        <LocalCuriositiesPanel entities={scene.entities || []} />
         <InventoryPanel inventory={player.inventory || []} />
-        <CurrenciesPanel currencies={player.currencies || []} />
+        <ResourcesPanel resources={player.resources || []} />
         <SkillsPanel skills={player.skills || []} />
         <HistoryPanel history={history} />
         <DebugPanel debug={debug} />

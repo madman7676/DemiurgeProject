@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { renderNarrationWithEntities } from "../../utils/renderNarrationWithEntities";
 
 const PIPELINE_STATUS_LABELS = {
   narrator: "Формується відповідь...",
-  lite: "Оновлюється стан...",
+  hyperlite: "Оновлюється стан...",
 };
 
-// Minimal chat surface for Lite exploration requests and responses.
+// Minimal chat surface for Hyperlite exploration requests and responses.
 export function ChatUI({
   messages,
   onSendMessage,
@@ -31,12 +30,12 @@ export function ChatUI({
   return (
     <div className="chat-window">
       <h1>DemiurgeProject</h1>
-      <p className="chat-subtitle">Lite tag-driven exploration</p>
+      <p className="chat-subtitle">Hyperlite exploration</p>
 
       <div className="message-list">
         {messages.length === 0 ? (
           <p className="empty-state">
-            Send a message to process the first Lite turn.
+            Send a message to process the first Hyperlite turn.
           </p>
         ) : (
           messages.map((message, index) => (
@@ -93,10 +92,18 @@ function renderMessageBody({ message, isPendingAssistant, currentPipelineStep })
 
   return (
     <>
-      <p>{renderNarrationWithEntities(message.text)}</p>
+      <p>{stripPlayerChangeTags(message.text)}</p>
       {renderChangeSummary(message.change_summary || [])}
     </>
   );
+}
+
+function stripPlayerChangeTags(text) {
+  return String(text || "")
+    .replace(/\s*\[\[player_change\|[^\]]*\]\]/g, "")
+    .replace(/\s*\[\[player_change\|[^\]]*$/g, "")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .trimStart();
 }
 
 function renderChangeSummary(changeSummary) {

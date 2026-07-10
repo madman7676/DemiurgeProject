@@ -1,4 +1,4 @@
-// Inventory display for the Lite player state.
+// Inventory display for the Hyperlite player state.
 export function InventoryPanel({ inventory }) {
   return (
     <section className="panel">
@@ -11,6 +11,7 @@ export function InventoryPanel({ inventory }) {
             <li key={item.id}>
               <span className="item-icon">{item.icon || "•"}</span>
               <span>{item.name || item.id}</span>
+              <strong className="stack-amount">x{item.quantity || 0}</strong>
             </li>
           ))}
         </ul>
