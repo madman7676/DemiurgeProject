@@ -41,7 +41,7 @@ backend/
 player:
   inventory: [{ id, name, icon, quantity }]
   resources: [{ id, name, icon, amount }]
-  skills: [{ id, name, icon }]
+  skills: [{ id, name, icon, level, progress, description? }]
 history:
   [{ user_input, narrator_response_for_ui, narrator_response_clean, applied_changes }]
 debug:
@@ -50,6 +50,8 @@ debug:
   llm_diagnostics
   parsed_tags
   applied_changes
+  ui_events
+  player_skills
   malformed_or_skipped_tags
   warnings
 ```
@@ -63,13 +65,27 @@ Only `player_change` tags are parsed. Narrative text is otherwise plain text.
 [[player_change|remove_item|item_id|quantity]]
 [[player_change|add_resource|resource_id|name|icon|amount]]
 [[player_change|remove_resource|resource_id|amount]]
-[[player_change|add_skill|skill_id|name|icon]]
+[[player_change|add_skill_progress|skill_id|name|icon|amount]]
 [[player_change|remove_skill|skill_id]]
 ```
 
 Item stacks merge only by `item_id`. Resource stacks merge only by `resource_id`.
 Remove operations clamp at zero and record debug warnings when the requested
 quantity or amount is greater than the current stack.
+
+Skill progress is computed by code:
+
+```text
+progress += amount
+while progress >= 100:
+  progress -= 100
+  level += 1
+```
+
+Unknown skills start at `level: 0`. They are persisted and visible in debug, but
+the Player Sheet shows only skills with `level > 0`. Progress tags for the same
+`skill_id` in one response are summed into one transient UI event. These events
+are returned with the current response only and are not stored in history.
 
 ## Local Setup
 

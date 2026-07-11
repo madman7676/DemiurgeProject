@@ -64,13 +64,60 @@ body {
   border-top: 1px solid rgba(31, 41, 51, 0.12);
   color: #3d4b57;
   display: grid;
-  gap: 4px;
+  gap: 8px;
   margin: 10px 0 0;
-  padding: 8px 0 0 18px;
+  padding: 8px 0 0;
 }
 
-.change-summary li {
+.change-summary-line {
   font-size: 0.92rem;
+  margin: 0;
+}
+
+.skill-progress-event {
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(82, 96, 109, 0.18);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+}
+
+.skill-progress-event p {
+  color: #3d4b57;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.skill-progress-note {
+  color: #52606d;
+}
+
+.segmented-progress,
+.progress-bar {
+  background: #e4e7eb;
+  border-radius: 999px;
+  display: flex;
+  height: 9px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.progress-segment {
+  display: block;
+  height: 100%;
+}
+
+.progress-current {
+  background: #4c6fff;
+}
+
+.progress-gained {
+  background: #2fb344;
+}
+
+.progress-empty {
+  background: transparent;
 }
 
 .message-bubble-player {
@@ -194,6 +241,54 @@ body {
   display: inline-flex;
   gap: 6px;
   padding: 6px 10px;
+}
+
+.skill-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.skill-card {
+  border: 1px solid #e4e7eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.skill-card-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.skill-level {
+  color: #52606d;
+  font-size: 0.86rem;
+  margin-left: auto;
+}
+
+.progress-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.progress-value {
+  color: #52606d;
+  font-size: 0.86rem;
+  min-width: 3ch;
+  text-align: right;
+}
+
+.skill-description {
+  color: #52606d;
+  font-size: 0.9rem;
+  margin: 0;
 }
 
 .debug-panel {

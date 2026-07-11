@@ -20,9 +20,9 @@ def create_initial_game_state() -> dict[str, Any]:
                 {"id": "coin", "name": "Coin", "icon": "$", "amount": 7},
             ],
             "skills": [
-                {"id": "negotiation", "name": "Negotiation", "icon": "◇"},
-                {"id": "awareness", "name": "Awareness", "icon": "◈"},
-                {"id": "save_spot", "name": "Save Spot", "icon": "*"},
+                {"id": "negotiation", "name": "Negotiation", "icon": "◇", "level": 1, "progress": 0},
+                {"id": "awareness", "name": "Awareness", "icon": "◈", "level": 1, "progress": 0},
+                {"id": "save_spot", "name": "Save Spot", "icon": "*", "level": 1, "progress": 0},
             ],
         },
         "history": [],
@@ -65,9 +65,7 @@ def normalize_game_state(state: dict[str, Any]) -> dict[str, Any]:
             "resources": source_player.get("resources", [])
             if isinstance(source_player.get("resources", []), list)
             else [],
-            "skills": source_player.get("skills", [])
-            if isinstance(source_player.get("skills", []), list)
-            else [],
+            "skills": _normalize_skills(source_player.get("skills", [])),
         },
         "history": source.get("history", []) if isinstance(source.get("history", []), list) else [],
         "debug": source.get("debug", {}) if isinstance(source.get("debug", {}), dict) else {},
@@ -84,6 +82,38 @@ def normalize_game_state(state: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_skills(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for skill in value:
+        if not isinstance(skill, dict):
+            continue
+        skill_id = str(skill.get("id", "")).strip()
+        if not skill_id:
+            continue
+        normalized_skill: dict[str, Any] = {
+            "id": skill_id,
+            "name": str(skill.get("name") or skill_id),
+            "icon": str(skill.get("icon") or "*"),
+            "level": _to_non_negative_int(skill.get("level", 0)),
+            "progress": min(99, _to_non_negative_int(skill.get("progress", 0))),
+        }
+        description = skill.get("description")
+        if description:
+            normalized_skill["description"] = str(description)
+        normalized.append(normalized_skill)
+    return normalized
+
+
+def _to_non_negative_int(value: object) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def build_visible_state(game_state: dict[str, Any]) -> dict[str, Any]:
     return deepcopy(game_state)
 
@@ -94,7 +124,6 @@ def append_history_turn(
     narrator_response_for_ui: str,
     narrator_response_clean: str,
     applied_changes: list[dict[str, Any]],
-    change_summary: list[dict[str, str]],
 ) -> None:
     history = game_state.setdefault("history", [])
     history.append(
@@ -103,7 +132,6 @@ def append_history_turn(
             "narrator_response_for_ui": narrator_response_for_ui,
             "narrator_response_clean": narrator_response_clean,
             "applied_changes": deepcopy(applied_changes),
-            "change_summary": deepcopy(change_summary),
         }
     )
     del history[:-HISTORY_LIMIT]
@@ -121,8 +149,6 @@ def build_messages(game_state: dict[str, Any]) -> list[dict[str, str]]:
                 or turn.get("narrator_response_clean", "")
             ),
         }
-        if index == len(history) - 1 and turn.get("change_summary"):
-            assistant_message["change_summary"] = deepcopy(turn["change_summary"])
         messages.append(assistant_message)
     return messages
 

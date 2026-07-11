@@ -5,7 +5,7 @@ import unittest
 
 from backend.api.routes import RouteContext, apply_player_changes, process_hyperlite_turn
 from backend.config import Settings
-from backend.core.state import create_initial_game_state, normalize_game_state
+from backend.core.state import build_messages, create_initial_game_state, normalize_game_state
 from backend.core.tag_parser import parse_tags, strip_player_change_tags, strip_tags
 from backend.llm.client import OllamaLLMClient
 from backend.llm.narrator import Narrator
@@ -63,6 +63,7 @@ class HyperlitePipelineTest(unittest.TestCase):
         self.assertNotIn("current_" + "loc" + "ation", prompt)
         self.assertNotIn("current_" + "scene_entities", prompt)
         self.assertIn("player_resources", prompt)
+        self.assertIn("player_skills", prompt)
 
     def test_narrator_diagnostics_detect_unclosed_player_change(self):
         class FakeLLMAdapter:
@@ -78,16 +79,16 @@ class HyperlitePipelineTest(unittest.TestCase):
                 return {"text": ""}
 
             def stream_text(self, system_prompt, user_prompt):
-                yield "Текст [[player_change|add_item|potion|"
+                yield "Текст [[player_change|add_skill_progress|fire_control|"
 
         narrator = Narrator(FakeLLMAdapter())
 
         text = narrator.narrate("оглянутись", create_initial_game_state(), on_token=lambda chunk: None)
 
-        self.assertEqual(text, "Текст [[player_change|add_item|potion|")
         self.assertTrue(narrator.last_diagnostics["has_unclosed_tag"])
         self.assertTrue(narrator.last_diagnostics["ends_inside_known_tag"])
         self.assertEqual(narrator.last_diagnostics["ends_inside_tag_kind"], "player_change")
+        self.assertEqual(text, "Текст [[player_change|add_skill_progress|fire_control|")
 
     def test_parse_strict_player_changes_and_reject_old_tags(self):
         legacy_player_change = "[[" + "player_change|add_item:fruit_basket]]"
@@ -100,65 +101,62 @@ class HyperlitePipelineTest(unittest.TestCase):
             f"{legacy_entity_tag} "
             f"{legacy_scene_tag} "
             "[[player_change|add_resource|gold|Золото|💰|10]] "
-            "[[player_change|add_skill|awareness_plus|Гостра увага|◇]]"
+            "[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]] "
+            "[[player_change|remove_skill|fire_control]]"
         )
 
         self.assertEqual(
             [change["command"] for change in parsed["player_changes"]],
-            ["add_item", "add_resource", "add_skill"],
+            ["add_item", "add_resource", "add_skill_progress", "remove_skill"],
         )
-        self.assertEqual(parsed["player_changes"][0]["args"][0], "fruit_basket")
+        self.assertEqual(parsed["player_changes"][2]["args"][0], "fire_control")
         self.assertEqual(
             [tag["reason"] for tag in parsed["malformed_or_skipped_tags"]],
             ["unknown_player_change", "unknown_tag", "unknown_tag"],
         )
 
-    def test_apply_player_changes_merges_items_resources_and_skills_by_id(self):
+    def test_item_and_resource_changes_still_merge_and_clamp(self):
         state = create_initial_game_state()
         parsed = parse_tags(
             "[[player_change|add_item|arrow|Arrow|➶|3]]"
             "[[player_change|add_item|arrow|Arrow|➶|2]]"
             "[[player_change|add_resource|mana|Mana|✦|5]]"
             "[[player_change|add_resource|mana|Mana|✦|7]]"
-            "[[player_change|add_skill|focus|Focus|◇]]"
-            "[[player_change|add_skill|focus|Focus|◇]]"
-        )
-
-        applied, skipped, warnings = apply_player_changes(state, parsed["player_changes"])
-
-        self.assertEqual(skipped, [])
-        self.assertEqual(warnings, [])
-        self.assertEqual(next(item for item in state["player"]["inventory"] if item["id"] == "arrow")["quantity"], 5)
-        self.assertEqual(next(resource for resource in state["player"]["resources"] if resource["id"] == "mana")["amount"], 12)
-        self.assertEqual(len([skill for skill in state["player"]["skills"] if skill["id"] == "focus"]), 1)
-        self.assertEqual([change["action"] for change in applied], ["add_item", "add_item", "add_resource", "add_resource", "add_skill", "add_skill"])
-
-    def test_remove_clamps_to_zero_and_records_debug_warning(self):
-        state = create_initial_game_state()
-        state["player"]["inventory"].append({"id": "arrow", "name": "Arrow", "icon": "➶", "quantity": 3})
-        state["player"]["resources"].append({"id": "mana", "name": "Mana", "icon": "✦", "amount": 2})
-        parsed = parse_tags(
             "[[player_change|remove_item|arrow|9]]"
-            "[[player_change|remove_resource|mana|5]]"
+            "[[player_change|remove_resource|mana|20]]"
         )
 
-        applied, skipped, warnings = apply_player_changes(state, parsed["player_changes"])
+        applied, skipped, warnings, events = apply_player_changes(state, parsed["player_changes"])
 
         self.assertEqual(skipped, [])
+        self.assertEqual(events, [])
         self.assertEqual(next(item for item in state["player"]["inventory"] if item["id"] == "arrow")["quantity"], 0)
         self.assertEqual(next(resource for resource in state["player"]["resources"] if resource["id"] == "mana")["amount"], 0)
         self.assertEqual([warning["type"] for warning in warnings], ["underflow_clamped", "underflow_clamped"])
-        self.assertEqual([change["remaining"] for change in applied], [0, 0])
+        self.assertEqual([change["action"] for change in applied], ["add_item", "add_item", "add_resource", "add_resource", "remove_item", "remove_resource"])
 
-    def test_process_turn_updates_player_and_hides_player_change_tags(self):
+    def test_new_skill_gets_progress_but_remains_level_zero(self):
+        state = create_initial_game_state()
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]]")["player_changes"],
+        )
+
+        skill = _find_skill(state, "fire_control")
+        self.assertEqual(skipped, [])
+        self.assertEqual(warnings, [])
+        self.assertEqual(skill["level"], 0)
+        self.assertEqual(skill["progress"], 12)
+        self.assertEqual(applied[0]["action"], "add_skill_progress")
+        self.assertEqual(events[0]["previousLevel"], 0)
+        self.assertEqual(events[0]["newLevel"], 0)
+
+    def test_level_zero_skill_is_not_in_recent_player_sheet_messages_but_is_in_debug(self):
         class FakeNarrator:
             last_diagnostics = {"model": "fake-model"}
 
             def narrate(self, player_input, session_state, on_token=None):
-                return (
-                    "Ти піднімаєш кошик з фруктами.\n"
-                    "[[player_change|add_item|fruit_basket|Кошик фруктів|🍎|1]]"
-                )
+                return "Ти відчуваєш жар.\n[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]]"
 
         class FakeStore:
             def __init__(self):
@@ -167,14 +165,290 @@ class HyperlitePipelineTest(unittest.TestCase):
             def get_session(self):
                 return self.state
 
-        result = process_hyperlite_turn("беру кошик", RouteContext(FakeStore(), FakeNarrator()))
+        result = process_hyperlite_turn("тренуюсь", RouteContext(FakeStore(), FakeNarrator()))
+
+        visible_skills = [skill for skill in result["visible_state"]["player"]["skills"] if skill.get("level", 0) > 0]
+        self.assertFalse(any(skill["id"] == "fire_control" for skill in visible_skills))
+        self.assertTrue(any(skill["id"] == "fire_control" and skill["level"] == 0 for skill in result["debug"]["player_skills"]))
+
+    def test_progress_moves_level_zero_skill_to_level_one(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append({"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 0, "progress": 92})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]]")["player_changes"],
+        )
+
+        skill = _find_skill(state, "fire_control")
+        self.assertEqual(skill["level"], 1)
+        self.assertEqual(skill["progress"], 4)
+        self.assertEqual(events[0]["previousLevel"], 0)
+        self.assertEqual(events[0]["newLevel"], 1)
+        self.assertEqual(events[0]["levelsGained"], 1)
+
+    def test_progress_without_level_up_updates_existing_skill(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append({"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 1, "progress": 64})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|add_skill_progress|fire_control|Інша назва|❌|12]]")["player_changes"],
+        )
+
+        skill = _find_skill(state, "fire_control")
+        self.assertEqual(skill["name"], "Контроль вогню")
+        self.assertEqual(skill["icon"], "🔥")
+        self.assertEqual(skill["level"], 1)
+        self.assertEqual(skill["progress"], 76)
+        self.assertEqual(events[0]["previousProgress"], 64)
+        self.assertEqual(events[0]["newProgress"], 76)
+
+    def test_progress_overflow_levels_up_once(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append({"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 1, "progress": 92})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|25]]")["player_changes"],
+        )
+
+        skill = _find_skill(state, "fire_control")
+        self.assertEqual(skill["level"], 2)
+        self.assertEqual(skill["progress"], 17)
+        self.assertEqual(events[0]["levelsGained"], 1)
+
+    def test_large_increment_can_gain_multiple_levels(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append({"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 0, "progress": 80})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|250]]")["player_changes"],
+        )
+
+        skill = _find_skill(state, "fire_control")
+        self.assertEqual(skill["level"], 3)
+        self.assertEqual(skill["progress"], 30)
+        self.assertEqual(events[0]["levelsGained"], 3)
+
+    def test_repeated_progress_tags_are_aggregated_by_skill_id(self):
+        state = create_initial_game_state()
+        parsed = parse_tags(
+            "[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]]"
+            "[[player_change|add_skill_progress|fire_control|Інша назва|❌|8]]"
+        )
+
+        applied, skipped, warnings, events = apply_player_changes(state, parsed["player_changes"])
+
+        skill = _find_skill(state, "fire_control")
+        self.assertEqual(skill["name"], "Контроль вогню")
+        self.assertEqual(skill["icon"], "🔥")
+        self.assertEqual(skill["progress"], 20)
+        self.assertEqual(len([skill for skill in state["player"]["skills"] if skill["id"] == "fire_control"]), 1)
+        self.assertEqual(events[0]["addedProgress"], 20)
+        self.assertEqual(len(events), 1)
+
+    def test_invalid_skill_progress_amount_does_not_change_state(self):
+        state = create_initial_game_state()
+        before = list(state["player"]["skills"])
+        parsed = parse_tags("[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|NaN]]")
+
+        applied, skipped, warnings, events = apply_player_changes(state, parsed["player_changes"])
+
+        self.assertEqual(state["player"]["skills"], before)
+        self.assertEqual(applied, [])
+        self.assertEqual(events, [])
+        self.assertEqual(skipped[0]["reason"], "invalid_amount")
+        self.assertEqual(warnings[0]["reason"], "invalid_amount")
+
+    def test_missing_skill_progress_fields_create_warning_in_turn_debug(self):
+        class FakeNarrator:
+            last_diagnostics = {"model": "fake-model"}
+
+            def narrate(self, player_input, session_state, on_token=None):
+                return "Текст [[player_change|add_skill_progress|fire_control|Контроль вогню|🔥]]"
+
+        class FakeStore:
+            def __init__(self):
+                self.state = create_initial_game_state()
+
+            def get_session(self):
+                return self.state
+
+        result = process_hyperlite_turn("тренуюсь", RouteContext(FakeStore(), FakeNarrator()))
+
+        self.assertEqual(result["debug"]["applied_changes"], [])
+        self.assertEqual(result["debug"]["warnings"][0]["action"], "add_skill_progress")
+        self.assertEqual(result["debug"]["warnings"][0]["reason"], "malformed_player_change")
+
+    def test_description_survives_progress_update(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append(
+            {
+                "id": "fire_control",
+                "name": "Контроль вогню",
+                "icon": "🔥",
+                "level": 1,
+                "progress": 10,
+                "description": "Утримує невелике полум'я.",
+            }
+        )
+
+        apply_player_changes(
+            state,
+            parse_tags("[[player_change|add_skill_progress|fire_control|Нове|❌|10]]")["player_changes"],
+        )
+
+        skill = _find_skill(state, "fire_control")
+        self.assertEqual(skill["description"], "Утримує невелике полум'я.")
+        self.assertEqual(skill["name"], "Контроль вогню")
+
+    def test_raw_skill_progress_tag_is_hidden_from_narrative(self):
+        class FakeNarrator:
+            last_diagnostics = {"model": "fake-model"}
+
+            def narrate(self, player_input, session_state, on_token=None):
+                return "Ти тренуєш дихання.\n[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]]"
+
+        class FakeStore:
+            def __init__(self):
+                self.state = create_initial_game_state()
+
+            def get_session(self):
+                return self.state
+
+        result = process_hyperlite_turn("тренуюсь", RouteContext(FakeStore(), FakeNarrator()))
         assistant = result["recent_messages"][-1]
 
-        self.assertEqual(result["narrative_text"], "Ти піднімаєш кошик з фруктами.")
+        self.assertEqual(result["narrative_text"], "Ти тренуєш дихання.")
         self.assertNotIn("[[player_change", assistant["text"])
-        self.assertNotIn("scene", result["visible_state"])
-        self.assertEqual(result["debug"]["parsed_tags"]["player_changes"][0]["command"], "add_item")
-        self.assertEqual(result["latest_change_summary"], [{"kind": "add_item", "text": "Отримано: Кошик фруктів x1"}])
+
+    def test_transient_ui_event_contains_previous_and_new_values(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append({"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 1, "progress": 92})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|25]]")["player_changes"],
+        )
+
+        self.assertEqual(
+            events[0],
+            {
+                "type": "skill_progress",
+                "skillId": "fire_control",
+                "name": "Контроль вогню",
+                "icon": "🔥",
+                "previousLevel": 1,
+                "previousProgress": 92,
+                "addedProgress": 25,
+                "newLevel": 2,
+                "newProgress": 17,
+                "levelsGained": 1,
+            },
+        )
+
+    def test_skill_progress_persists_through_save_load_normalization(self):
+        snapshot = {
+            "player": {
+                "inventory": [],
+                "resources": [],
+                "skills": [
+                    {"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 0, "progress": 64},
+                    {
+                        "id": "ember_touch",
+                        "name": "Дотик іскри",
+                        "icon": "✨",
+                        "level": 2,
+                        "progress": 17,
+                        "description": "Запалює сухий трут.",
+                    },
+                ],
+            },
+            "history": [],
+            "debug": {},
+            "output_language": "uk",
+        }
+
+        normalized = normalize_game_state(snapshot)
+
+        self.assertEqual(normalized["player"]["skills"], snapshot["player"]["skills"])
+
+    def test_remove_skill_deletes_existing_unlocked_and_level_zero_skills(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append({"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 0, "progress": 64})
+        state["player"]["skills"].append({"id": "ember_touch", "name": "Дотик іскри", "icon": "✨", "level": 1, "progress": 10})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags(
+                "[[player_change|remove_skill|fire_control]]"
+                "[[player_change|remove_skill|ember_touch]]"
+            )["player_changes"],
+        )
+
+        self.assertIsNone(_find_skill_or_none(state, "fire_control"))
+        self.assertIsNone(_find_skill_or_none(state, "ember_touch"))
+        self.assertEqual(warnings, [])
+        self.assertEqual(events, [])
+        self.assertEqual([change["action"] for change in applied], ["remove_skill", "remove_skill"])
+
+    def test_remove_skill_missing_id_is_noop_with_warning(self):
+        state = create_initial_game_state()
+        before = list(state["player"]["skills"])
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|remove_skill|missing_skill]]")["player_changes"],
+        )
+
+        self.assertEqual(state["player"]["skills"], before)
+        self.assertEqual(applied, [])
+        self.assertEqual(events, [])
+        self.assertEqual(warnings[0]["reason"], "skill_not_found")
+
+    def test_remove_skill_then_add_new_skill_progress_level_one_without_lineage(self):
+        state = create_initial_game_state()
+        state["player"]["skills"].append({"id": "fire_control", "name": "Контроль вогню", "icon": "🔥", "level": 2, "progress": 40})
+        parsed = parse_tags(
+            "[[player_change|remove_skill|fire_control]]"
+            "[[player_change|add_skill_progress|inferno_mastery|Влада над полум'ям|🔥|100]]"
+        )
+
+        applied, skipped, warnings, events = apply_player_changes(state, parsed["player_changes"])
+
+        new_skill = _find_skill(state, "inferno_mastery")
+        self.assertIsNone(_find_skill_or_none(state, "fire_control"))
+        self.assertEqual(new_skill["level"], 1)
+        self.assertEqual(new_skill["progress"], 0)
+        self.assertNotIn("transformedFrom", new_skill)
+        self.assertNotIn("derivedFrom", new_skill)
+        self.assertEqual(events[0]["previousLevel"], 0)
+        self.assertEqual(events[0]["newLevel"], 1)
+
+    def test_transient_skill_progress_event_is_returned_but_not_persisted_in_history(self):
+        state = create_initial_game_state()
+
+        class FakeNarrator:
+            last_diagnostics = {"model": "fake-model"}
+
+            def narrate(self, player_input, session_state, on_token=None):
+                return "Ти практикуєшся.\n[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]]"
+
+        class FakeStore:
+            def __init__(self, state):
+                self.state = state
+
+            def get_session(self):
+                return self.state
+
+        result = process_hyperlite_turn("тренуюсь", RouteContext(FakeStore(state), FakeNarrator()))
+        messages = build_messages(state)
+
+        self.assertEqual(result["recent_messages"][-1]["change_summary"][0]["type"], "skill_progress")
+        self.assertNotIn("change_summary", messages[-1])
+        self.assertNotIn("change_summary", state["history"][-1])
 
     def test_strip_tags_removes_all_service_tags_from_clean_history(self):
         legacy_entity_tag = "[[" + "entity:item|x|річ|available|I]]"
@@ -182,16 +456,16 @@ class HyperlitePipelineTest(unittest.TestCase):
         self.assertEqual(
             strip_tags(
                 f"Текст {legacy_entity_tag}\n"
-                f"[[player_change|add_item|x|Річ|I|1]]{legacy_scene_tag}"
+                f"[[player_change|add_skill_progress|x|Річ|I|1]]{legacy_scene_tag}"
             ),
             "Текст",
         )
 
-    def test_strip_player_change_tags_only_hides_valid_mutation_tags(self):
+    def test_strip_player_change_tags_only_hides_mutation_tags(self):
         legacy_entity_tag = "[[" + "entity:item|fruit_basket|Кошик|available|🍎]]"
         text = (
             "Ти бачиш кошик. "
-            "[[player_change|add_item|fruit_basket|Кошик|🍎|1]] "
+            "[[player_change|add_skill_progress|fire_control|Контроль вогню|🔥|12]] "
             f"{legacy_entity_tag}"
         )
         self.assertEqual(
@@ -199,19 +473,16 @@ class HyperlitePipelineTest(unittest.TestCase):
             f"Ти бачиш кошик. {legacy_entity_tag}",
         )
 
-    def test_normalize_game_state_removes_legacy_resource_container(self):
-        legacy_container = "curr" + "encies"
-        legacy_scene_key = "sce" + "ne"
-        legacy_place_key = "loc" + "ation"
-        normalized = normalize_game_state(
-            {
-                legacy_scene_key: {legacy_place_key: {"id": "old"}, "entities": []},
-                "player": {legacy_container: [{"id": "gold"}]},
-            }
-        )
 
-        self.assertNotIn(legacy_container, normalized["player"])
-        self.assertEqual(normalized["player"]["resources"], [])
+def _find_skill(state, skill_id):
+    skill = _find_skill_or_none(state, skill_id)
+    if skill is None:
+        raise AssertionError(f"Missing skill: {skill_id}")
+    return skill
+
+
+def _find_skill_or_none(state, skill_id):
+    return next((skill for skill in state["player"]["skills"] if skill.get("id") == skill_id), None)
 
 
 if __name__ == "__main__":
