@@ -33,6 +33,7 @@ class Narrator:
             {
                 "player_inventory": session_state.get("player", {}).get("inventory", []),
                 "player_resources": session_state.get("player", {}).get("resources", []),
+                "player_currencies": session_state.get("player", {}).get("currencies", []),
                 "player_skills": session_state.get("player", {}).get("skills", []),
                 "recent_history": session_state.get("history", [])[-8:],
                 "player_input": player_input,

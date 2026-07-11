@@ -11,7 +11,9 @@ PLAYER_CHANGE_ARG_COUNTS = {
     "add_item": 4,
     "remove_item": 2,
     "add_resource": 4,
-    "remove_resource": 2,
+    "remove_resource": 4,
+    "add_currency": 4,
+    "remove_currency": 2,
     "add_skill_progress": 4,
     "remove_skill": 1,
 }

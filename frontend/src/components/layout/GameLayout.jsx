@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchSession, sendPlayerMessageStream } from "../../api/gameApi";
 import { ChatUI } from "../chat/ChatUI";
 import { DebugPanel } from "../debug/DebugPanel";
+import { CurrenciesPanel } from "../state_panels/CurrenciesPanel";
 import { HistoryPanel } from "../state_panels/HistoryPanel";
 import { InventoryPanel } from "../state_panels/InventoryPanel";
 import { ResourcesPanel } from "../state_panels/ResourcesPanel";
@@ -92,6 +93,7 @@ export function GameLayout() {
       </section>
 
       <aside className="state-panel-grid">
+        <CurrenciesPanel currencies={player.currencies || []} />
         <InventoryPanel inventory={player.inventory || []} />
         <ResourcesPanel resources={player.resources || []} />
         <SkillsPanel skills={player.skills || []} />

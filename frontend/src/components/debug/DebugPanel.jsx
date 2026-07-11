@@ -10,6 +10,9 @@ export function DebugPanel({ debug }) {
           <>
             <DebugBlock title="Raw LLM Response" value={debug.raw_llm_response || ""} />
             <DebugBlock title="Parsed Tags" value={debug.parsed_tags || {}} />
+            <DebugBlock title="Inventory" value={debug.player_inventory || []} />
+            <DebugBlock title="Resources" value={debug.player_resources || []} />
+            <DebugBlock title="Currencies" value={debug.player_currencies || []} />
             <DebugBlock title="Player Skills" value={debug.player_skills || []} />
             <DebugBlock title="Applied Changes" value={debug.applied_changes || []} />
             <DebugBlock title="UI Events" value={debug.ui_events || []} />

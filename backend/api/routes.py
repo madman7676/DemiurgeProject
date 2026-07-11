@@ -17,7 +17,8 @@ from backend.core.tag_parser import parse_tags, strip_player_change_tags, strip_
 from backend.llm.narrator import Narrator
 
 
-SKILL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+ENTITY_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+SKILL_ID_PATTERN = ENTITY_ID_PATTERN
 
 
 @dataclass
@@ -93,6 +94,9 @@ def process_hyperlite_turn(
         "parsed_tags": {"player_changes": parsed_tags["player_changes"]},
         "applied_changes": applied_changes,
         "ui_events": ui_events,
+        "player_inventory": _debug_stacks(game_state, "inventory", "quantity"),
+        "player_resources": _debug_stacks(game_state, "resources", "amount"),
+        "player_currencies": _debug_stacks(game_state, "currencies", "amount"),
         "player_skills": _debug_skills(game_state),
         "malformed_or_skipped_tags": malformed_or_skipped,
         "warnings": warnings,
@@ -135,9 +139,13 @@ def build_change_summary(
             quantity = int(change.get("quantity", 0) or 0)
             summary.append({"kind": action, "text": f"Втрачено: {name} x{quantity}"})
         elif action == "add_resource":
-            summary.append({"kind": action, "text": f"Отримано: {amount} {name}"})
+            summary.append({"kind": action, "text": f"Отримано: {name} x{amount}"})
         elif action == "remove_resource":
-            summary.append({"kind": action, "text": f"Витрачено: {amount} {name}"})
+            summary.append({"kind": action, "text": f"Втрачено: {name} x{amount}"})
+        elif action == "add_currency":
+            summary.append({"kind": action, "text": f"Отримано: {name} x{amount}"})
+        elif action == "remove_currency":
+            summary.append({"kind": action, "text": f"Втрачено: {name} x{amount}"})
     summary.extend(ui_events or [])
     return summary
 
@@ -156,6 +164,7 @@ def apply_player_changes(
     player = game_state.setdefault("player", {})
     player.setdefault("inventory", [])
     player.setdefault("resources", [])
+    player.setdefault("currencies", [])
     player.setdefault("skills", [])
 
     for tag in player_change_tags:
@@ -163,19 +172,42 @@ def apply_player_changes(
         args = list(tag.get("args", []))
 
         if command == "add_item":
-            change, invalid = _add_item(player, args)
-            (skipped if invalid else applied).append(change)
+            change, warning = _add_item(player, args)
+            if warning:
+                skipped.append(change)
+                warnings.append(warning)
+            else:
+                applied.append(change)
         elif command == "remove_item":
-            change, warning = _remove_stack(player["inventory"], args, "quantity", "remove_item")
-            applied.append(change)
+            change, warning = _remove_item(player, args)
+            if change:
+                applied.append(change)
             if warning:
                 warnings.append(warning)
         elif command == "add_resource":
-            change, invalid = _add_resource(player, args)
-            (skipped if invalid else applied).append(change)
+            change, warning = _add_resource(player, args)
+            if warning:
+                skipped.append(change)
+                warnings.append(warning)
+            else:
+                applied.append(change)
         elif command == "remove_resource":
-            change, warning = _remove_stack(player["resources"], args, "amount", "remove_resource")
-            applied.append(change)
+            change, warning = _remove_resource(player, args)
+            if change:
+                applied.append(change)
+            if warning:
+                warnings.append(warning)
+        elif command == "add_currency":
+            change, warning = _add_currency(player, args)
+            if warning:
+                skipped.append(change)
+                warnings.append(warning)
+            else:
+                applied.append(change)
+        elif command == "remove_currency":
+            change, warning = _remove_currency(player, args)
+            if change:
+                applied.append(change)
             if warning:
                 warnings.append(warning)
         elif command == "add_skill_progress":
@@ -201,11 +233,16 @@ def apply_player_changes(
     return applied, skipped, warnings, ui_events
 
 
-def _add_item(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], bool]:
+def _add_item(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], dict[str, Any] | None]:
     item_id, name, icon, quantity_text = args[0], args[1], args[2], args[3]
-    quantity = _to_non_negative_int(quantity_text)
-    if quantity <= 0:
-        return _invalid({"raw": f"add_item:{item_id}"}, "invalid_quantity"), True
+    quantity = _to_positive_int(quantity_text)
+    if quantity is None:
+        return _invalid({"raw": f"add_item:{item_id}"}, "invalid_quantity"), _change_warning(
+            "add_item",
+            item_id,
+            "invalid_amount",
+            requested=quantity_text,
+        )
     inventory = player["inventory"]
     existing = _find_by_id(inventory, item_id)
     if existing is None:
@@ -215,14 +252,25 @@ def _add_item(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], 
         existing["name"] = name
         existing["icon"] = icon
     existing["quantity"] = int(existing.get("quantity", 0) or 0) + quantity
-    return {"action": "add_item", "id": item_id, "name": name, "icon": icon, "quantity": quantity}, False
+    return {"action": "add_item", "id": item_id, "name": name, "icon": icon, "quantity": quantity}, None
 
 
-def _add_resource(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], bool]:
+def _add_resource(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], dict[str, Any] | None]:
     resource_id, name, icon, amount_text = args[0], args[1], args[2], args[3]
-    amount = _to_non_negative_int(amount_text)
-    if amount <= 0:
-        return _invalid({"raw": f"add_resource:{resource_id}"}, "invalid_amount"), True
+    amount = _to_positive_int(amount_text)
+    if not ENTITY_ID_PATTERN.fullmatch(resource_id):
+        return _invalid({"raw": f"add_resource:{resource_id}"}, "invalid_resource_id"), _change_warning(
+            "add_resource",
+            resource_id,
+            "invalid_resource_id",
+        )
+    if amount is None:
+        return _invalid({"raw": f"add_resource:{resource_id}"}, "invalid_amount"), _change_warning(
+            "add_resource",
+            resource_id,
+            "invalid_amount",
+            requested=amount_text,
+        )
     resources = player["resources"]
     existing = _find_by_id(resources, resource_id)
     if existing is None:
@@ -238,7 +286,117 @@ def _add_resource(player: dict[str, Any], args: list[str]) -> tuple[dict[str, An
         "name": name,
         "icon": icon,
         "amount": amount,
-    }, False
+    }, None
+
+
+def _remove_item(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    item_id, quantity_text = args[0], args[1]
+    quantity = _to_positive_int(quantity_text)
+    if quantity is None:
+        return {}, _change_warning("remove_item", item_id, "invalid_amount", requested=quantity_text)
+    return _remove_depleting_stack(
+        player["inventory"],
+        item_id,
+        quantity,
+        "quantity",
+        "remove_item",
+        fallback_name=item_id,
+        fallback_icon="",
+    )
+
+
+def _remove_resource(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    resource_id, name, icon, amount_text = args[0], args[1], args[2], args[3]
+    amount = _to_positive_int(amount_text)
+    if not ENTITY_ID_PATTERN.fullmatch(resource_id):
+        return {}, _change_warning("remove_resource", resource_id, "invalid_resource_id")
+    if amount is None:
+        return {}, _change_warning("remove_resource", resource_id, "invalid_amount", requested=amount_text)
+    return _remove_depleting_stack(
+        player["resources"],
+        resource_id,
+        amount,
+        "amount",
+        "remove_resource",
+        fallback_name=name,
+        fallback_icon=icon,
+    )
+
+
+def _add_currency(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    currency_id, name, icon, amount_text = args[0], args[1], args[2], args[3]
+    amount = _to_positive_int(amount_text)
+    if not ENTITY_ID_PATTERN.fullmatch(currency_id):
+        return _invalid({"raw": f"add_currency:{currency_id}"}, "invalid_currency_id"), _change_warning(
+            "add_currency",
+            currency_id,
+            "invalid_currency_id",
+        )
+    if amount is None:
+        return _invalid({"raw": f"add_currency:{currency_id}"}, "invalid_amount"), _change_warning(
+            "add_currency",
+            currency_id,
+            "invalid_amount",
+            requested=amount_text,
+        )
+    currencies = player["currencies"]
+    existing = _find_by_id(currencies, currency_id)
+    if existing is None:
+        existing = {"id": currency_id, "name": name, "icon": icon, "amount": 0}
+        currencies.append(existing)
+    else:
+        if not existing.get("name") and name:
+            existing["name"] = name
+        if not existing.get("icon") and icon:
+            existing["icon"] = icon
+    existing["amount"] = int(existing.get("amount", 0) or 0) + amount
+    return {
+        "action": "add_currency",
+        "id": currency_id,
+        "name": str(existing.get("name") or name),
+        "icon": str(existing.get("icon") or icon),
+        "amount": amount,
+    }, None
+
+
+def _remove_currency(player: dict[str, Any], args: list[str]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    currency_id, amount_text = args[0], args[1]
+    amount = _to_positive_int(amount_text)
+    if not ENTITY_ID_PATTERN.fullmatch(currency_id):
+        return {}, _change_warning("remove_currency", currency_id, "invalid_currency_id")
+    if amount is None:
+        return {}, _change_warning("remove_currency", currency_id, "invalid_amount", requested=amount_text)
+    existing = _find_by_id(player["currencies"], currency_id)
+    if existing is None:
+        return {}, _change_warning(
+            "remove_currency",
+            currency_id,
+            "unknown_target",
+            requested_amount=amount,
+            removed_amount=0,
+        )
+    current_amount = int(existing.get("amount", 0) or 0)
+    removed_amount = min(current_amount, amount)
+    existing["amount"] = max(0, current_amount - amount)
+    warning = None
+    if removed_amount < amount:
+        warning = _change_warning(
+            "remove_currency",
+            currency_id,
+            "insufficient_amount",
+            requested_amount=amount,
+            removed_amount=removed_amount,
+        )
+    if removed_amount <= 0:
+        return {}, warning
+    return {
+        "action": "remove_currency",
+        "id": currency_id,
+        "name": str(existing.get("name") or currency_id),
+        "icon": str(existing.get("icon") or ""),
+        "amount": removed_amount,
+        "remaining": int(existing.get("amount", 0) or 0),
+    }, warning
 
 
 def _collect_skill_progress(
@@ -358,36 +516,54 @@ def _remove_skill(player: dict[str, Any], skill_id: str) -> tuple[dict[str, Any]
     return {"action": "remove_skill", "id": skill_id, "name": str(name)}, None
 
 
-def _remove_stack(
+def _remove_depleting_stack(
     stacks: list[dict[str, Any]],
-    args: list[str],
+    stack_id: str,
+    requested_amount: int,
     amount_key: str,
     action: str,
+    fallback_name: str,
+    fallback_icon: str,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    stack_id, amount_text = args[0], args[1]
-    amount = _to_non_negative_int(amount_text)
     existing = _find_by_id(stacks, stack_id)
-    name = existing.get("name", stack_id) if existing is not None else stack_id
-    current_amount = int(existing.get(amount_key, 0) or 0) if existing is not None else 0
-    new_amount = max(0, current_amount - amount)
+    if existing is None:
+        return {}, _change_warning(
+            action,
+            stack_id,
+            "unknown_target",
+            requested_amount=requested_amount,
+            removed_amount=0,
+        )
+
+    name = str(existing.get("name") or fallback_name or stack_id)
+    icon = str(existing.get("icon") or fallback_icon or "")
+    current_amount = int(existing.get(amount_key, 0) or 0)
+    removed_amount = min(current_amount, requested_amount)
+    new_amount = max(0, current_amount - requested_amount)
     warning = None
 
-    if existing is not None:
-        existing[amount_key] = new_amount
-    if amount > current_amount:
-        warning = {
-            "type": "underflow_clamped",
-            "action": action,
-            "id": stack_id,
-            "requested": amount,
-            "available": current_amount,
-        }
+    existing[amount_key] = new_amount
+    if new_amount <= 0:
+        stacks[:] = [stack for stack in stacks if stack.get("id") != stack_id]
+
+    if removed_amount < requested_amount:
+        warning = _change_warning(
+            action,
+            stack_id,
+            "insufficient_amount",
+            requested_amount=requested_amount,
+            removed_amount=removed_amount,
+        )
+
+    if removed_amount <= 0:
+        return {}, warning
 
     return {
         "action": action,
         "id": stack_id,
         "name": str(name),
-        amount_key: amount,
+        "icon": icon,
+        amount_key: removed_amount,
         "remaining": new_amount,
     }, warning
 
@@ -404,16 +580,42 @@ def _parser_warnings(skipped_tags: list[dict[str, Any]]) -> list[dict[str, Any]]
     warnings: list[dict[str, Any]] = []
     for tag in skipped_tags:
         raw = str(tag.get("raw", ""))
-        if raw.startswith("player_change|add_skill_progress"):
+        parts = raw.split("|")
+        action = parts[1] if len(parts) > 1 and parts[0] == "player_change" else ""
+        if action in {
+            "add_skill_progress",
+            "add_currency",
+            "remove_currency",
+            "add_resource",
+            "remove_resource",
+            "add_item",
+            "remove_item",
+        }:
             warnings.append(
                 {
-                    "type": "skill_change_skipped",
-                    "action": "add_skill_progress",
+                    "type": "player_change_skipped",
+                    "action": action,
                     "raw": raw,
-                    "reason": str(tag.get("reason", "invalid_skill_progress_tag")),
+                    "reason": str(tag.get("reason", "invalid_player_change_tag")),
                 }
             )
     return warnings
+
+
+def _change_warning(
+    operation: str,
+    entity_id: str,
+    reason: str,
+    **details: Any,
+) -> dict[str, Any]:
+    warning = {
+        "type": "player_change_warning",
+        "operation": operation,
+        "entityId": entity_id,
+        "reason": reason,
+    }
+    warning.update(details)
+    return warning
 
 
 def _skill_warning(
@@ -450,6 +652,25 @@ def _debug_skills(game_state: dict[str, Any]) -> list[dict[str, Any]]:
             item["description"] = str(skill["description"])
         debug_skills.append(item)
     return debug_skills
+
+
+def _debug_stacks(game_state: dict[str, Any], container_name: str, amount_key: str) -> list[dict[str, Any]]:
+    stacks = game_state.get("player", {}).get(container_name, [])
+    if not isinstance(stacks, list):
+        return []
+    debug_stacks: list[dict[str, Any]] = []
+    for stack in stacks:
+        if not isinstance(stack, dict):
+            continue
+        debug_stacks.append(
+            {
+                "id": str(stack.get("id", "")),
+                "name": str(stack.get("name", "")),
+                "icon": str(stack.get("icon", "")),
+                amount_key: _to_non_negative_int(stack.get(amount_key, 0)),
+            }
+        )
+    return debug_stacks
 
 
 def _to_non_negative_int(value: str) -> int:

@@ -16,7 +16,8 @@ def create_initial_game_state() -> dict[str, Any]:
                 {"id": "old_compass", "name": "Old Compass", "icon": "◌", "quantity": 1},
                 {"id": "travel_cloak", "name": "Travel Cloak", "icon": "▧", "quantity": 1},
             ],
-            "resources": [
+            "resources": [],
+            "currencies": [
                 {"id": "coin", "name": "Coin", "icon": "$", "amount": 7},
             ],
             "skills": [
@@ -32,6 +33,9 @@ def create_initial_game_state() -> dict[str, Any]:
             "llm_diagnostics": {},
             "parsed_tags": {"player_changes": []},
             "applied_changes": [],
+            "player_inventory": [],
+            "player_resources": [],
+            "player_currencies": [],
             "malformed_or_skipped_tags": [],
             "warnings": [],
         },
@@ -59,12 +63,9 @@ def normalize_game_state(state: dict[str, Any]) -> dict[str, Any]:
     source_player = source.get("player", {}) if isinstance(source.get("player", {}), dict) else {}
     normalized = {
         "player": {
-            "inventory": source_player.get("inventory", [])
-            if isinstance(source_player.get("inventory", []), list)
-            else [],
-            "resources": source_player.get("resources", [])
-            if isinstance(source_player.get("resources", []), list)
-            else [],
+            "inventory": _normalize_stacks(source_player.get("inventory", []), "quantity", keep_zero=False),
+            "resources": _normalize_stacks(source_player.get("resources", []), "amount", keep_zero=False),
+            "currencies": _normalize_stacks(source_player.get("currencies", []), "amount", keep_zero=True),
             "skills": _normalize_skills(source_player.get("skills", [])),
         },
         "history": source.get("history", []) if isinstance(source.get("history", []), list) else [],
@@ -76,9 +77,37 @@ def normalize_game_state(state: dict[str, Any]) -> dict[str, Any]:
     normalized["debug"].setdefault("llm_diagnostics", {})
     normalized["debug"].setdefault("parsed_tags", {"player_changes": []})
     normalized["debug"].setdefault("applied_changes", [])
+    normalized["debug"].setdefault("player_inventory", [])
+    normalized["debug"].setdefault("player_resources", [])
+    normalized["debug"].setdefault("player_currencies", [])
     normalized["debug"].setdefault("malformed_or_skipped_tags", [])
     normalized["debug"].setdefault("warnings", [])
     normalized.setdefault("output_language", "")
+    return normalized
+
+
+def _normalize_stacks(value: object, amount_key: str, keep_zero: bool) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for stack in value:
+        if not isinstance(stack, dict):
+            continue
+        stack_id = str(stack.get("id", "")).strip()
+        if not stack_id:
+            continue
+        amount = _to_non_negative_int(stack.get(amount_key, 0))
+        if amount <= 0 and not keep_zero:
+            continue
+        normalized.append(
+            {
+                "id": stack_id,
+                "name": str(stack.get("name") or stack_id),
+                "icon": str(stack.get("icon") or "•"),
+                amount_key: amount,
+            }
+        )
     return normalized
 
 

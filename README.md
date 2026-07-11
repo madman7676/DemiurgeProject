@@ -41,6 +41,7 @@ backend/
 player:
   inventory: [{ id, name, icon, quantity }]
   resources: [{ id, name, icon, amount }]
+  currencies: [{ id, name, icon, amount }]
   skills: [{ id, name, icon, level, progress, description? }]
 history:
   [{ user_input, narrator_response_for_ui, narrator_response_clean, applied_changes }]
@@ -51,6 +52,9 @@ debug:
   parsed_tags
   applied_changes
   ui_events
+  player_inventory
+  player_resources
+  player_currencies
   player_skills
   malformed_or_skipped_tags
   warnings
@@ -64,14 +68,20 @@ Only `player_change` tags are parsed. Narrative text is otherwise plain text.
 [[player_change|add_item|item_id|name|icon|quantity]]
 [[player_change|remove_item|item_id|quantity]]
 [[player_change|add_resource|resource_id|name|icon|amount]]
-[[player_change|remove_resource|resource_id|amount]]
+[[player_change|remove_resource|resource_id|name|icon|amount]]
+[[player_change|add_currency|currency_id|name|icon|amount]]
+[[player_change|remove_currency|currency_id|amount]]
 [[player_change|add_skill_progress|skill_id|name|icon|amount]]
 [[player_change|remove_skill|skill_id]]
 ```
 
 Item stacks merge only by `item_id`. Resource stacks merge only by `resource_id`.
+Currency stacks merge only by `currency_id`.
 Remove operations clamp at zero and record debug warnings when the requested
 quantity or amount is greater than the current stack.
+
+When an item or resource reaches `0`, it is removed from player state. When a
+currency reaches `0`, it remains in state and stays visible in the Player Sheet.
 
 Skill progress is computed by code:
 

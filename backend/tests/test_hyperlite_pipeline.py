@@ -53,7 +53,7 @@ class HyperlitePipelineTest(unittest.TestCase):
             "оглянутись",
             {
                 legacy_scene_key: {legacy_place_key: {"id": "old"}, "entities": [{"id": "x"}]},
-                "player": {"inventory": [], "resources": [], "skills": []},
+                "player": {"inventory": [], "resources": [], "currencies": [], "skills": []},
                 "history": [],
                 "output_language": "uk",
             },
@@ -63,6 +63,7 @@ class HyperlitePipelineTest(unittest.TestCase):
         self.assertNotIn("current_" + "loc" + "ation", prompt)
         self.assertNotIn("current_" + "scene_entities", prompt)
         self.assertIn("player_resources", prompt)
+        self.assertIn("player_currencies", prompt)
         self.assertIn("player_skills", prompt)
 
     def test_narrator_diagnostics_detect_unclosed_player_change(self):
@@ -115,7 +116,7 @@ class HyperlitePipelineTest(unittest.TestCase):
             ["unknown_player_change", "unknown_tag", "unknown_tag"],
         )
 
-    def test_item_and_resource_changes_still_merge_and_clamp(self):
+    def test_item_and_resource_changes_merge_and_remove_zero_stacks(self):
         state = create_initial_game_state()
         parsed = parse_tags(
             "[[player_change|add_item|arrow|Arrow|➶|3]]"
@@ -123,17 +124,188 @@ class HyperlitePipelineTest(unittest.TestCase):
             "[[player_change|add_resource|mana|Mana|✦|5]]"
             "[[player_change|add_resource|mana|Mana|✦|7]]"
             "[[player_change|remove_item|arrow|9]]"
-            "[[player_change|remove_resource|mana|20]]"
+            "[[player_change|remove_resource|mana|Mana|✦|20]]"
         )
 
         applied, skipped, warnings, events = apply_player_changes(state, parsed["player_changes"])
 
         self.assertEqual(skipped, [])
         self.assertEqual(events, [])
-        self.assertEqual(next(item for item in state["player"]["inventory"] if item["id"] == "arrow")["quantity"], 0)
-        self.assertEqual(next(resource for resource in state["player"]["resources"] if resource["id"] == "mana")["amount"], 0)
-        self.assertEqual([warning["type"] for warning in warnings], ["underflow_clamped", "underflow_clamped"])
+        self.assertFalse(any(item["id"] == "arrow" for item in state["player"]["inventory"]))
+        self.assertFalse(any(resource["id"] == "mana" for resource in state["player"]["resources"]))
+        self.assertEqual([warning["operation"] for warning in warnings], ["remove_item", "remove_resource"])
+        self.assertEqual([warning["removed_amount"] for warning in warnings], [5, 12])
         self.assertEqual([change["action"] for change in applied], ["add_item", "add_item", "add_resource", "add_resource", "remove_item", "remove_resource"])
+        self.assertEqual([change.get("quantity") or change.get("amount") for change in applied[-2:]], [5, 12])
+
+    def test_add_currency_creates_and_merges_without_duplicate(self):
+        state = create_initial_game_state()
+        parsed = parse_tags(
+            "[[player_change|add_currency|gold|золото|💰|25]]"
+            "[[player_change|add_currency|gold|інше золото|❌|10]]"
+        )
+
+        applied, skipped, warnings, events = apply_player_changes(state, parsed["player_changes"])
+
+        currencies = [currency for currency in state["player"]["currencies"] if currency["id"] == "gold"]
+        self.assertEqual(skipped, [])
+        self.assertEqual(warnings, [])
+        self.assertEqual(len(currencies), 1)
+        self.assertEqual(currencies[0]["amount"], 35)
+        self.assertEqual(currencies[0]["name"], "золото")
+        self.assertEqual(currencies[0]["icon"], "💰")
+        self.assertEqual([change["action"] for change in applied], ["add_currency", "add_currency"])
+
+    def test_remove_currency_decreases_and_keeps_zero_currency(self):
+        state = create_initial_game_state()
+        state["player"]["currencies"].append({"id": "gold", "name": "золото", "icon": "💰", "amount": 25})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags(
+                "[[player_change|remove_currency|gold|10]]"
+                "[[player_change|remove_currency|gold|15]]"
+            )["player_changes"],
+        )
+
+        gold = next(currency for currency in state["player"]["currencies"] if currency["id"] == "gold")
+        self.assertEqual(gold["amount"], 0)
+        self.assertEqual(warnings, [])
+        self.assertEqual([change["amount"] for change in applied], [10, 15])
+
+    def test_excessive_remove_currency_sets_zero_and_warns_actual_removed(self):
+        state = create_initial_game_state()
+        state["player"]["currencies"].append({"id": "gold", "name": "золото", "icon": "💰", "amount": 3})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|remove_currency|gold|10]]")["player_changes"],
+        )
+
+        gold = next(currency for currency in state["player"]["currencies"] if currency["id"] == "gold")
+        self.assertEqual(gold["amount"], 0)
+        self.assertEqual(applied[0]["amount"], 3)
+        self.assertEqual(warnings[0]["operation"], "remove_currency")
+        self.assertEqual(warnings[0]["requested_amount"], 10)
+        self.assertEqual(warnings[0]["removed_amount"], 3)
+
+    def test_remove_missing_currency_is_noop_with_warning(self):
+        state = create_initial_game_state()
+        before = list(state["player"]["currencies"])
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|remove_currency|gems|5]]")["player_changes"],
+        )
+
+        self.assertEqual(state["player"]["currencies"], before)
+        self.assertEqual(applied, [])
+        self.assertEqual(warnings[0]["operation"], "remove_currency")
+        self.assertEqual(warnings[0]["reason"], "unknown_target")
+
+    def test_invalid_currency_amount_does_not_change_state(self):
+        state = create_initial_game_state()
+        before = list(state["player"]["currencies"])
+        parsed = parse_tags("[[player_change|add_currency|gold|золото|💰|NaN]]")
+
+        applied, skipped, warnings, events = apply_player_changes(state, parsed["player_changes"])
+
+        self.assertEqual(state["player"]["currencies"], before)
+        self.assertEqual(applied, [])
+        self.assertEqual(skipped[0]["reason"], "invalid_amount")
+        self.assertEqual(warnings[0]["operation"], "add_currency")
+
+    def test_valid_remove_resource_parses_updates_state_and_creates_loss_event(self):
+        state = create_initial_game_state()
+        state["player"]["resources"].append({"id": "stone", "name": "камінці", "icon": "🪨", "amount": 8})
+
+        result = process_hyperlite_turn("викидаю", RouteContext(_FakeStore(state), _FakeNarrator(
+            "Ти викидаєш камінці.\n[[player_change|remove_resource|stone|камінці|🪨|5]]"
+        )))
+
+        stone = next(resource for resource in result["visible_state"]["player"]["resources"] if resource["id"] == "stone")
+        self.assertEqual(stone["amount"], 3)
+        self.assertEqual(result["debug"]["parsed_tags"]["player_changes"][0]["command"], "remove_resource")
+        self.assertEqual(result["recent_messages"][-1]["change_summary"][0]["text"], "Втрачено: камінці x5")
+        self.assertNotIn("[[player_change", result["narrative_text"])
+
+    def test_excessive_remove_resource_removes_only_available_and_deletes_zero_stack(self):
+        state = create_initial_game_state()
+        state["player"]["resources"].append({"id": "stone", "name": "камінці", "icon": "🪨", "amount": 3})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|remove_resource|stone|камінці|🪨|5]]")["player_changes"],
+        )
+
+        self.assertFalse(any(resource["id"] == "stone" for resource in state["player"]["resources"]))
+        self.assertEqual(applied[0]["amount"], 3)
+        self.assertEqual(warnings[0]["operation"], "remove_resource")
+        self.assertEqual(warnings[0]["requested_amount"], 5)
+        self.assertEqual(warnings[0]["removed_amount"], 3)
+
+    def test_remove_unknown_resource_has_warning_and_no_success_event(self):
+        state = create_initial_game_state()
+
+        result = process_hyperlite_turn("викидаю", RouteContext(_FakeStore(state), _FakeNarrator(
+            "Немає камінців.\n[[player_change|remove_resource|stone|камінці|🪨|5]]"
+        )))
+
+        self.assertEqual(result["debug"]["applied_changes"], [])
+        self.assertEqual(result["latest_change_summary"], [])
+        self.assertEqual(result["debug"]["warnings"][0]["reason"], "unknown_target")
+
+    def test_remove_item_actual_amount_and_zero_cleanup(self):
+        state = create_initial_game_state()
+        state["player"]["inventory"].append({"id": "steel_sword", "name": "сталевий меч", "icon": "⚔️", "quantity": 1})
+
+        applied, skipped, warnings, events = apply_player_changes(
+            state,
+            parse_tags("[[player_change|remove_item|steel_sword|5]]")["player_changes"],
+        )
+
+        self.assertFalse(any(item["id"] == "steel_sword" for item in state["player"]["inventory"]))
+        self.assertEqual(applied[0]["quantity"], 1)
+        self.assertEqual(warnings[0]["requested_amount"], 5)
+        self.assertEqual(warnings[0]["removed_amount"], 1)
+
+    def test_process_turn_item_remove_event_uses_actual_removed_quantity(self):
+        state = create_initial_game_state()
+        state["player"]["inventory"].append({"id": "steel_sword", "name": "сталевий меч", "icon": "⚔️", "quantity": 1})
+
+        result = process_hyperlite_turn("ламаю меч", RouteContext(_FakeStore(state), _FakeNarrator(
+            "Меч втрачено.\n[[player_change|remove_item|steel_sword|5]]"
+        )))
+
+        self.assertEqual(result["recent_messages"][-1]["change_summary"][0]["text"], "Втрачено: сталевий меч x1")
+
+    def test_normalize_preserves_zero_currency_and_removes_zero_items_resources(self):
+        normalized = normalize_game_state(
+            {
+                "player": {
+                    "inventory": [{"id": "arrow", "name": "Arrow", "icon": "➶", "quantity": 0}],
+                    "resources": [{"id": "stone", "name": "камінці", "icon": "🪨", "amount": 0}],
+                    "currencies": [{"id": "gold", "name": "золото", "icon": "💰", "amount": 0}],
+                    "skills": [],
+                }
+            }
+        )
+
+        self.assertEqual(normalized["player"]["inventory"], [])
+        self.assertEqual(normalized["player"]["resources"], [])
+        self.assertEqual(normalized["player"]["currencies"], [{"id": "gold", "name": "золото", "icon": "💰", "amount": 0}])
+
+    def test_updated_resource_state_survives_save_load_normalization(self):
+        state = create_initial_game_state()
+        state["player"]["resources"].append({"id": "stone", "name": "камінці", "icon": "🪨", "amount": 8})
+        apply_player_changes(
+            state,
+            parse_tags("[[player_change|remove_resource|stone|камінці|🪨|5]]")["player_changes"],
+        )
+
+        normalized = normalize_game_state(state)
+
+        self.assertEqual(normalized["player"]["resources"], [{"id": "stone", "name": "камінці", "icon": "🪨", "amount": 3}])
 
     def test_new_skill_gets_progress_but_remains_level_zero(self):
         state = create_initial_game_state()
@@ -483,6 +655,24 @@ def _find_skill(state, skill_id):
 
 def _find_skill_or_none(state, skill_id):
     return next((skill for skill in state["player"]["skills"] if skill.get("id") == skill_id), None)
+
+
+class _FakeNarrator:
+    last_diagnostics = {"model": "fake-model"}
+
+    def __init__(self, text):
+        self.text = text
+
+    def narrate(self, player_input, session_state, on_token=None):
+        return self.text
+
+
+class _FakeStore:
+    def __init__(self, state):
+        self.state = state
+
+    def get_session(self):
+        return self.state
 
 
 if __name__ == "__main__":
